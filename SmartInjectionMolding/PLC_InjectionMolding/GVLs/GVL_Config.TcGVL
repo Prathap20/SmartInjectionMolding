@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <GVL Name="GVL_Config" Id="{235ae3c3-2514-4b80-98cc-4d4ec62c8d3b}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	// Temperature Configuration
+	
+	c_fStartupTempSP      : REAL := 120.0;
+    c_fShutdownTempSP     : REAL := 20.0;
+    c_fShutdownComplete   : REAL := 30.0;
+	
+	// Pressure Limits
+	
+	c_fStartupPressure    : REAL := 4.0;
+    c_fMaxPressure        : REAL := 100.0;
+	c_fMinOperatingTemp	  : REAL := 80.0;
+	
+	// Process Timing
+	
+	c_tCoolingTime        : TIME := T#5S;
+	
+	// Hopper Monitoring
+	
+	c_tHopperLowTimeout   : TIME := T#30S;
+    c_tHopperFillTimeout  : TIME := T#180S;
+	
+	// Production
+	
+	c_nBatchSize          : UDINT := 1000;	
+	
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

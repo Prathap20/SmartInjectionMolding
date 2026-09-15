@@ -1,0 +1,106 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_AlarmManager" Id="{052f0df4-eca5-46de-b71a-c0a16f715e58}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_AlarmManager
+VAR_INPUT
+    eMode : E_MachineMode;
+
+    // Hopper
+    bHopperLowTimeout  : BOOL;
+    bHopperFillTimeout : BOOL;
+
+    // Process
+    fBarrelTemp  : REAL;
+    fPressureBar : REAL;
+
+    // Safety / machine
+    bGuardOpen : BOOL;
+    bEStop     : BOOL;
+
+    // Vision - used later
+    bVisionOffline : BOOL;
+    bVisionTimeout : BOOL;
+
+    // Operator
+    bAck : BOOL;
+END_VAR
+
+VAR_OUTPUT
+    bFaultActive : BOOL;
+    eActiveAlarm : E_AlarmID := E_AlarmID.ALARM_NONE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Default
+
+bFaultActive := FALSE;
+eActiveAlarm := E_AlarmID.ALARM_NONE;
+
+// Alarm priority
+// Highest priority first
+
+
+// Emergency Stop
+IF bEStop THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_ESTOP;
+	
+
+// High pressure
+ELSIF fPressureBar > GVL_Config.c_fMaxPressure THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_PRESSURE_HIGH;
+
+
+// Guard opened during active machine operation
+ELSIF bGuardOpen
+      AND (
+          (eMode = E_MachineMode.MODE_STARTUP)
+          OR
+          (eMode = E_MachineMode.MODE_RUN)
+      ) THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_GUARD_OPEN;
+
+
+// Hopper low-level timeout
+ELSIF bHopperLowTimeout THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_HOPPER_LOW_TIMEOUT;
+
+
+// Hopper full-level timeout
+ELSIF bHopperFillTimeout THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_HOPPER_FILL_TIMEOUT;
+
+// Vision communication fault
+ELSIF bVisionOffline THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_VISION_OFFLINE;
+
+
+// Vision result timeout
+ELSIF bVisionTimeout THEN
+
+    bFaultActive := TRUE;
+    eActiveAlarm := E_AlarmID.ALARM_VISION_TIMEOUT;
+
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_AlarmManager">
+      <LineId Id="45" Count="0" />
+      <LineId Id="47" Count="2" />
+      <LineId Id="52" Count="9" />
+      <LineId Id="110" Count="0" />
+      <LineId Id="63" Count="31" />
+      <LineId Id="96" Count="13" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

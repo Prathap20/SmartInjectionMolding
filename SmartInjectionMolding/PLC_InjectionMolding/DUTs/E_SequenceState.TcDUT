@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="E_SequenceState" Id="{8a725b52-5c0d-4c28-b7cc-d60d1799e0d6}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_SequenceState :
+(
+	SEQ_IDLE :=0,
+	SEQ_INJECT :=1,
+	SEQ_COOLING :=2,
+	SEQ_DOSING :=3,
+	SEQ_OPEN_MOLD :=4,
+	SEQ_EJECT:=5,
+	SEQ_CLOSE_MOLD:=6,
+	
+	//Vision
+	SEQ_VISION_TRIGGER:=7,
+	SEQ_VISION_WAIT:=8,
+	SEQ_SORT_PART:=9,
+	
+	SEQ_COMPLETE:= 10
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

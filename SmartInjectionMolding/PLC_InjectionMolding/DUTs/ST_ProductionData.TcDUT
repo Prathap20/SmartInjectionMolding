@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="ST_ProductionData" Id="{0bd66d16-e7e0-4282-87f6-353f5fa3d187}">
+    <Declaration><![CDATA[TYPE ST_ProductionData :
+STRUCT
+	nTotalParts        : UDINT;
+    nGoodParts         : UDINT;
+    nRejectedParts     : UDINT;
+
+    fRejectRate        : REAL;
+
+    tLastCycleTime     : TIME;
+
+    nLastDefectCode    : UINT;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

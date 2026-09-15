@@ -1,0 +1,456 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="MAIN" Id="{8ea770d7-29d7-4617-838f-87fb45ad0588}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	fbPlantSim   : FB_PlantSimulation;
+
+    fbPressure   : FB_AnalogInput;
+    fbBarrelTemp : FB_AnalogInput;
+    fbMoldTemp   : FB_AnalogInput;
+	fbMachine	 : FB_Machine;
+	fbTemperature: FB_TemperatureControl;
+	fbInjectionSequence : FB_InjectionSequence;
+	fbExtruder	 : FB_Extruder;
+	fbMold		 : FB_Mold;
+	fbHopper	 : FB_Hopper;
+	fbAlarmManager : FB_AlarmManager;
+	fbInterlocks : FB_Interlocks;
+
+	// Temporary manual commands for commissioning/testing
+	bTestM101_Request   : BOOL := FALSE;
+	bTestM102_Request   : BOOL := FALSE;
+	bTestM201_l_Request : BOOL := FALSE;
+	bTestM201_r_Request : BOOL := FALSE;
+	
+	 // Vision
+    fbVision              : FB_Vision;
+    bVisionTestTrigger    : BOOL := FALSE;
+    bVisionTestAck        : BOOL := FALSE;
+    nVisionTestProductID  : DINT := 1;
+    bVisionOffline        : BOOL := FALSE;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[										// ANALOG INPUT PROCESSING
+
+
+// Pressure PI101: 0 ... 200 bar
+fbPressure(
+    nRaw := GVL_IO.PI101_raw,
+    fEngMin := 0.0,
+    fEngMax := 200.0,
+    fValue => GVL_Status.fPressureBar
+);
+
+
+// Barrel temperature TI101: -100 ... 600 °C
+fbBarrelTemp(
+    nRaw := GVL_IO.TI101_raw,
+    fEngMin := -100.0,
+    fEngMax := 600.0,
+    fValue => GVL_Status.fBarrelTemp
+);
+
+
+// Mold temperature TI201: -100 ... 600 °C
+fbMoldTemp(
+    nRaw := GVL_IO.TI201_raw,
+    fEngMin := -100.0,
+    fEngMax := 600.0,
+    fValue => GVL_Status.fMoldTemp
+);
+
+														// MACHINE MODE CONTROL
+
+fbMachine(
+    bStartup := GVL_IO.B_startup,
+    bStart := GVL_IO.B_start,
+    bStop := GVL_IO.B_stop,
+    bShutdown := GVL_IO.B_shutdown,
+    bEStop := GVL_IO.B_ES,
+    bAck := GVL_IO.B_ack,
+
+    fBarrelTemp := GVL_Status.fBarrelTemp,
+    fPressureBar := GVL_Status.fPressureBar,
+    bMoldClosed := GVL_IO.ES202,
+
+    bSequenceStopComplete :=
+        fbInjectionSequence.bStopComplete,
+
+    eMode => GVL_Status.eMachineMode,
+    bMachineReady => GVL_Status.bMachineReady,
+
+    bV2 => GVL_IO.V2,
+    bV3 => GVL_IO.V3
+);
+
+
+														// TEMPERATURE CONTROL
+fbTemperature(
+    bEnable := fbMachine.bTempControlEnable,
+	fSetpoint := fbMachine.fTempSetpoint,
+    fActualTemp := GVL_Status.fBarrelTemp,
+
+    fHeatingPower => GVL_IO.P_in,
+    bCoolingValve => GVL_IO.V1
+);
+
+													// AUTOMATIC INJECTION SEQUENCE
+
+
+fbInjectionSequence(
+    bEnable :=
+        GVL_Status.eMachineMode =
+        E_MachineMode.MODE_RUN,
+
+    bStopRequest := GVL_IO.B_stop,
+
+    bAtFront := GVL_IO.ES101,
+    bAtRear := GVL_IO.ES102,
+
+    bMoldOpen := GVL_IO.ES201,
+    bMoldClosed := GVL_IO.ES202,
+
+    tCoolingTime := GVL_Config.c_tCoolingTime,
+
+    nProducedParts :=
+        GVL_Status.stProduction.nTotalParts,
+
+    nBatchSize :=
+        GVL_Config.c_nBatchSize,
+		
+	bVisionReady :=
+    	GVL_Status.stVision.bReady,
+
+	bVisionResultValid :=
+    	GVL_Status.stVision.bResultValid,
+
+	bVisionPartOK :=
+    	GVL_Status.stVision.bPartOK,
+		
+	bVisionOffline := fbVision.bOffline,
+
+	bVisionTimeout := fbVision.bTimeout,
+
+    eState => GVL_Status.eSequenceState,
+	
+	tLastCycleTime =>
+        GVL_Status.stProduction.tLastCycleTime
+);
+
+	GVL_Status.bCycleActive := fbInjectionSequence.bCycleActive;
+	
+	
+	
+											// COUNT PRODUCED PARTS
+
+IF fbInjectionSequence.bPartCompleted THEN
+
+    GVL_Status.stProduction.nTotalParts :=
+        GVL_Status.stProduction.nTotalParts + 1;
+
+END_IF;
+
+// Good part counter
+IF fbInjectionSequence.bGoodPart THEN
+
+    GVL_Status.stProduction.nGoodParts :=
+        GVL_Status.stProduction.nGoodParts + 1;
+
+END_IF;
+
+
+// Rejected part counter
+IF fbInjectionSequence.bRejectedPart THEN
+
+    GVL_Status.stProduction.nRejectedParts :=
+        GVL_Status.stProduction.nRejectedParts + 1;
+
+    // Store meaningful reject reason
+    IF fbVision.bOffline THEN
+
+        // Vision system unavailable
+        GVL_Status.stProduction.nLastDefectCode := UINT#4001;
+
+    ELSIF fbVision.bTimeout THEN
+
+        // Vision inspection timeout
+        GVL_Status.stProduction.nLastDefectCode := UINT#4002;
+
+    ELSE
+
+        // Genuine Cognex / simulated inspection defect
+        GVL_Status.stProduction.nLastDefectCode :=
+            GVL_Status.stVision.nDefectCode;
+
+    END_IF;
+
+END_IF;
+
+
+// Reject rate
+IF GVL_Status.stProduction.nTotalParts > 0 THEN
+
+    GVL_Status.stProduction.fRejectRate :=
+        (
+            UDINT_TO_REAL(
+                GVL_Status.stProduction.nRejectedParts
+            )
+            /
+            UDINT_TO_REAL(
+                GVL_Status.stProduction.nTotalParts
+            )
+        ) * 100.0;
+
+ELSE
+
+    GVL_Status.stProduction.fRejectRate := 0.0;
+
+END_IF;
+
+
+											// EQUIPMENT CONTROL (Extruder + MOLD)
+
+fbExtruder(
+    bRotateCmd :=
+        fbMachine.bStartupRotateCmd
+        OR fbInjectionSequence.bRotateCmd,
+
+    bInjectCmd :=
+        fbInjectionSequence.bInjectCmd,
+
+    bES101 := GVL_IO.ES101,
+    bES102 := GVL_IO.ES102
+);
+
+fbMold(
+    bOpenCmd :=
+        fbInjectionSequence.bOpenMoldCmd,
+
+    bCloseCmd :=
+        fbMachine.bStartupCloseCmd
+        OR fbInjectionSequence.bCloseMoldCmd,
+
+    bES201 := GVL_IO.ES201,
+    bES202 := GVL_IO.ES202
+);
+
+										// MACHINE INTERLOCKS
+
+fbInterlocks(
+    eMode := GVL_Status.eMachineMode,
+	bM101_Request := fbExtruder.bRotateRequest,
+    bM102_Request := fbExtruder.bInjectRequest,
+    bM201_l_Request := fbMold.bOpenRequest,
+    bM201_r_Request := fbMold.bCloseRequest,
+
+    bES101 := GVL_IO.ES101,
+    bES102 := GVL_IO.ES102,
+    bES201 := GVL_IO.ES201,
+    bES202 := GVL_IO.ES202,
+
+    bGuardOpen := GVL_IO.S101,
+
+    fPressureBar := GVL_Status.fPressureBar,
+    fBarrelTemp := GVL_Status.fBarrelTemp,
+
+    bM101_Enable => GVL_IO.M101,
+    bM102_Enable => GVL_IO.M102,
+    bM201_l_Enable => GVL_IO.M201_l,
+    bM201_r_Enable => GVL_IO.M201_r
+);
+
+																	// HOPPER CONTROL
+
+fbHopper(
+    eMode := GVL_Status.eMachineMode,
+
+    bLIS101 := GVL_IO.LIS101,
+    bLIS102 := GVL_IO.LIS102,
+
+    bAck := GVL_IO.B_ack,
+
+    bFeederRequest => GVL_IO.M301,
+    bWarning => GVL_IO.W_hopper
+);
+
+																	// VISION SYSTEM
+// Temporary simulation / commissioning interface
+
+fbVision(
+    bEnable :=
+        (GVL_Status.eMachineMode = E_MachineMode.MODE_RUN),
+
+    bTrigger :=
+        fbInjectionSequence.bVisionTrigger,
+
+    bAck :=
+        fbInjectionSequence.bVisionAck,
+
+    bFaultAck :=
+        GVL_IO.B_ack,
+
+    bForceOffline :=
+        GVL_Simulation.bForceVisionOffline,
+
+    bForceReject :=
+        GVL_Simulation.bForceVisionReject,
+
+    bForceTimeout :=
+        GVL_Simulation.bForceVisionTimeout,
+
+    nProductID :=
+        UDINT_TO_DINT(
+            GVL_Status.stProduction.nTotalParts
+        ),
+
+    stResult =>
+        GVL_Status.stVision,
+
+    bOffline =>
+        bVisionOffline
+);
+
+																	// ALARM MANAGEMENT
+
+
+fbAlarmManager(
+    eMode := GVL_Status.eMachineMode,
+
+    bHopperLowTimeout :=
+        fbHopper.bLowLevelTimeout,
+
+    bHopperFillTimeout :=
+        fbHopper.bFillTimeout,
+
+    fBarrelTemp :=
+        GVL_Status.fBarrelTemp,
+
+    fPressureBar :=
+        GVL_Status.fPressureBar,
+
+    bGuardOpen :=
+        GVL_IO.S101,
+
+    bEStop :=
+        GVL_IO.B_ES,
+
+    bVisionOffline :=
+        bVisionOffline,
+
+    bVisionTimeout :=
+		fbVision.bTimeout,
+
+    bAck :=
+        GVL_IO.B_ack,
+
+    bFaultActive =>
+        GVL_Status.bFaultActive,
+
+    eActiveAlarm =>
+        GVL_Status.eActiveAlarm
+);
+
+
+											// PLANT SIMULATION
+
+fbPlantSim(
+    bEnable := GVL_Simulation.bSimulationEnabled,
+
+    bM101 := GVL_IO.M101,
+    bM102 := GVL_IO.M102,
+    bM201_l := GVL_IO.M201_l,
+    bM201_r := GVL_IO.M201_r,
+    bM301 := GVL_IO.M301,
+
+    bV1 := GVL_IO.V1,
+    bV2 := GVL_IO.V2,
+    bV3 := GVL_IO.V3,
+
+    fHeaterPower := GVL_IO.P_in,
+
+    eMode := GVL_Status.eMachineMode,
+
+    bES101 => GVL_IO.ES101,
+    bES102 => GVL_IO.ES102,
+    bES201 => GVL_IO.ES201,
+    bES202 => GVL_IO.ES202,
+
+    bLIS101 => GVL_IO.LIS101,
+    bLIS102 => GVL_IO.LIS102,
+
+    nPI101Raw => GVL_IO.PI101_raw,
+    nTI101Raw => GVL_IO.TI101_raw,
+    nTI201Raw => GVL_IO.TI201_raw
+);
+
+
+										]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="95" Count="26" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="275" Count="1" />
+      <LineId Id="278" Count="20" />
+      <LineId Id="273" Count="0" />
+      <LineId Id="272" Count="0" />
+      <LineId Id="196" Count="1" />
+      <LineId Id="200" Count="1" />
+      <LineId Id="299" Count="0" />
+      <LineId Id="203" Count="3" />
+      <LineId Id="193" Count="0" />
+      <LineId Id="210" Count="23" />
+      <LineId Id="439" Count="0" />
+      <LineId Id="441" Count="6" />
+      <LineId Id="440" Count="0" />
+      <LineId Id="513" Count="0" />
+      <LineId Id="515" Count="0" />
+      <LineId Id="517" Count="1" />
+      <LineId Id="234" Count="1" />
+      <LineId Id="606" Count="2" />
+      <LineId Id="194" Count="0" />
+      <LineId Id="266" Count="2" />
+      <LineId Id="300" Count="1" />
+      <LineId Id="262" Count="0" />
+      <LineId Id="256" Count="5" />
+      <LineId Id="255" Count="0" />
+      <LineId Id="473" Count="10" />
+      <LineId Id="582" Count="23" />
+      <LineId Id="492" Count="20" />
+      <LineId Id="472" Count="0" />
+      <LineId Id="195" Count="0" />
+      <LineId Id="152" Count="1" />
+      <LineId Id="155" Count="0" />
+      <LineId Id="302" Count="9" />
+      <LineId Id="164" Count="0" />
+      <LineId Id="312" Count="10" />
+      <LineId Id="149" Count="0" />
+      <LineId Id="122" Count="1" />
+      <LineId Id="125" Count="2" />
+      <LineId Id="346" Count="0" />
+      <LineId Id="128" Count="17" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="190" Count="0" />
+      <LineId Id="177" Count="1" />
+      <LineId Id="180" Count="9" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="420" Count="2" />
+      <LineId Id="424" Count="0" />
+      <LineId Id="520" Count="31" />
+      <LineId Id="438" Count="0" />
+      <LineId Id="372" Count="28" />
+      <LineId Id="519" Count="0" />
+      <LineId Id="402" Count="8" />
+      <LineId Id="176" Count="0" />
+      <LineId Id="173" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="12" Count="0" />
+      <LineId Id="14" Count="28" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="44" Count="1" />
+      <LineId Id="43" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

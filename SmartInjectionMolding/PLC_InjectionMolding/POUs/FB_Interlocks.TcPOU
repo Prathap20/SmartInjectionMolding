@@ -1,0 +1,114 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Interlocks" Id="{7709c715-2c36-4d7c-9b4b-d1ca045d3700}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Interlocks
+VAR_INPUT
+	// Requested actuator commands
+    eMode			: E_MachineMode;
+	
+	bM101_Request   : BOOL;
+    bM102_Request   : BOOL;
+    bM201_l_Request : BOOL;
+    bM201_r_Request : BOOL;
+
+    // Sensors
+    bES101          : BOOL;
+    bES102          : BOOL;
+    bES201          : BOOL;
+    bES202          : BOOL;
+
+    bGuardOpen      : BOOL;
+
+    // Process values
+    fPressureBar    : REAL;
+    fBarrelTemp     : REAL;
+END_VAR
+VAR_OUTPUT
+	// Safe actuator commands
+    bM101_Enable    : BOOL;
+    bM102_Enable    : BOOL;
+    bM201_l_Enable  : BOOL;
+    bM201_r_Enable  : BOOL;
+
+	// Status
+    bPressureOK     : BOOL;
+    bTemperatureOK  : BOOL;
+    bGuardOK        : BOOL;
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+											// Basic permissives
+
+bPressureOK :=
+    fPressureBar <= GVL_Config.c_fMaxPressure;
+
+bTemperatureOK :=
+    fBarrelTemp >= GVL_Config.c_fMinOperatingTemp;
+
+bGuardOK :=
+    NOT bGuardOpen;
+
+										// M101 - Extruder screw rotation
+
+bM101_Enable :=
+    bM101_Request
+    AND bPressureOK
+    AND bTemperatureOK
+    AND NOT bM102_Request
+	AND
+	(
+		(eMode = E_MachineMode.MODE_STARTUP)
+		OR NOT bES102
+	);
+	
+											// M102 - Injection cylinder
+
+bM102_Enable :=
+    bM102_Request
+    AND bGuardOK
+    AND bPressureOK
+    AND bTemperatureOK
+    AND NOT bES101
+    AND NOT bM101_Request;
+
+													// Mold opening
+
+bM201_l_Enable :=
+    bM201_l_Request
+    AND bGuardOK
+    AND NOT bES201
+    AND NOT bM201_r_Request;
+
+													// Mold closing
+
+bM201_r_Enable :=
+    bM201_r_Request
+    AND bGuardOK
+    AND NOT bES202
+    AND NOT bM201_l_Request;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Interlocks">
+      <LineId Id="40" Count="1" />
+      <LineId Id="43" Count="8" />
+      <LineId Id="54" Count="1" />
+      <LineId Id="57" Count="4" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="133" Count="0" />
+      <LineId Id="140" Count="0" />
+      <LineId Id="136" Count="0" />
+      <LineId Id="139" Count="0" />
+      <LineId Id="135" Count="0" />
+      <LineId Id="141" Count="0" />
+      <LineId Id="67" Count="0" />
+      <LineId Id="69" Count="7" />
+      <LineId Id="79" Count="1" />
+      <LineId Id="82" Count="5" />
+      <LineId Id="90" Count="1" />
+      <LineId Id="93" Count="4" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

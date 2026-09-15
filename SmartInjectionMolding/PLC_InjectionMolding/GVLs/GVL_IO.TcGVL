@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <GVL Name="GVL_IO" Id="{ddb0fc02-76f2-4d74-b87c-79e315eacb20}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	
+	//Operator Inputs
+	
+	B_start		: BOOL;
+	B_ES		: BOOL;
+	B_ack		: BOOL;
+	B_startup	: BOOL;
+	B_shutdown	: BOOL;
+	B_stop		: BOOL;
+	
+	//Position Sensors
+	
+	ES101		: BOOL;
+	ES102		: BOOL;
+	ES201		: BOOL;
+	ES202		: BOOL;
+	
+	//Safety
+	
+	S101		: BOOL;
+	
+	//Hopper Sensors
+	
+	LIS101		: BOOL;
+	LIS102		: BOOL;	
+	
+	//Analog Inputs
+	
+	PI101_raw	: INT;
+	TI101_raw	: INT;
+	TI201_raw	: INT;
+	
+	//Motors
+	
+	M101         : BOOL;
+    M102         : BOOL;
+    M201_l       : BOOL;
+    M201_r       : BOOL;
+    M301         : BOOL;
+	
+	//Valves
+	
+	V1           : BOOL;
+    V2           : BOOL;
+    V3           : BOOL;
+	
+	//Heating
+	
+	P_in		 : REAL;
+	
+	//Hopper Warning
+	
+	W_hopper	 : BOOL;
+	
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

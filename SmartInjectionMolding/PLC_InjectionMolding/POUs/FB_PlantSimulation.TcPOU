@@ -1,0 +1,291 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_PlantSimulation" Id="{ddf5ebee-45b2-4315-a047-2197965ab8cb}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PlantSimulation
+VAR_INPUT
+	bEnable		: BOOL;
+	
+	//Motors
+	
+	bM101		: BOOL;
+	bM102		: BOOL;
+	bM201_l		: BOOL;
+	bM201_r		: BOOL;
+	bM301		: BOOL;
+	
+	// Valves
+	bV1			: BOOL;
+	bV2			: BOOL;
+	bV3			: BOOL;
+	
+	// Heater
+	fHeaterPower: REAL;
+	
+	//machine Operating Mode
+	eMode		: E_MachineMode;	
+END_VAR
+VAR_OUTPUT
+	// Screw end switches
+    bES101        : BOOL;
+    bES102        : BOOL;
+
+    // Mold end switches
+    bES201        : BOOL;
+    bES202        : BOOL;
+
+    // Hopper level switches
+    bLIS101       : BOOL;
+    bLIS102       : BOOL;
+
+    // Simulated analog inputs
+    nPI101Raw     : INT;
+    nTI101Raw     : INT;
+    nTI201Raw     : INT;
+END_VAR
+VAR
+	 // Positions: 0 ... 100 %
+    fScrewPosition : REAL := 50.0;
+    fMoldPosition  : REAL := 0.0;
+    fHopperLevel   : REAL := 75.0;
+
+    // Physical process values
+    fPressure      : REAL := 0.0;
+    fBarrelTemp    : REAL := 20.0;
+    fMoldTemp      : REAL := 20.0;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF bEnable THEN
+
+    									// Injection screw simulation
+
+    // Injection cylinder pushes screw forward
+    IF bM102 THEN
+        fScrewPosition := fScrewPosition + 1.0;
+    END_IF;
+
+
+    // During normal operation M101 performs dosing,
+    // causing the screw to move backwards.
+    IF bM101 AND
+       (eMode = E_MachineMode.MODE_RUN) THEN
+
+        fScrewPosition := fScrewPosition - 0.5;
+
+    END_IF;
+
+
+    // Limit screw position
+    fScrewPosition :=
+        LIMIT(0.0, fScrewPosition, 100.0);
+
+
+    // Generate end switches
+    bES101 := (fScrewPosition >= 100.0);
+    bES102 := (fScrewPosition <= 0.0);
+
+
+
+   
+    											// Mold simulation
+  
+
+    IF bM201_l THEN
+        fMoldPosition := fMoldPosition - 0.2;
+    END_IF;
+
+    IF bM201_r THEN
+        fMoldPosition := fMoldPosition + 0.2;
+    END_IF;
+
+
+    fMoldPosition :=
+        LIMIT(0.0, fMoldPosition, 100.0);
+
+
+    bES201 := (fMoldPosition <= 0.0);
+    bES202 := (fMoldPosition >= 100.0);
+
+	
+    										 // Hopper simulation
+											 
+
+    IF bM301 THEN
+
+        fHopperLevel := fHopperLevel + 0.05;
+
+    ELSIF eMode = E_MachineMode.MODE_RUN THEN
+
+        // Material consumption
+        fHopperLevel := fHopperLevel - 0.002;
+
+    END_IF;
+
+
+    fHopperLevel :=
+        LIMIT(0.0, fHopperLevel, 100.0);
+
+
+    // Low-level sensor
+    //bLIS101 := (fHopperLevel > 20.0);
+
+    // High-level sensor
+    //bLIS102 := (fHopperLevel >= 90.0);
+	
+	// Normal level-switch simulation
+	bLIS101 := (fHopperLevel > 20.0);
+	bLIS102 := (fHopperLevel >= 90.0);
+
+	// Fault injection
+	IF GVL_Simulation.bForceLIS101Fault THEN
+    	bLIS101 := FALSE;
+	END_IF;
+
+	IF GVL_Simulation.bForceLIS102Fault THEN
+    	bLIS102 := FALSE;
+	END_IF;
+
+
+
+    									// Barrel Temperature Simulation
+
+    IF fHeaterPower > 0.0 THEN
+
+        fBarrelTemp :=
+            fBarrelTemp +
+            (fHeaterPower / 100.0) * 0.03;
+
+    END_IF;
+
+
+    // Cooling valve
+    IF bV1 THEN
+        fBarrelTemp := fBarrelTemp - 0.02;
+    END_IF;
+
+
+    // Natural cooling toward ambient
+    IF (fHeaterPower <= 0.0) AND NOT bV1 THEN
+
+        IF fBarrelTemp > 20.0 THEN
+            fBarrelTemp := fBarrelTemp - 0.002;
+        END_IF;
+
+    END_IF;
+
+
+    fBarrelTemp :=
+        LIMIT(-100.0, fBarrelTemp, 600.0);
+
+
+										   // Mold Temperature Simulation
+
+    IF bV2 OR bV3 THEN
+
+        IF fMoldTemp > 20.0 THEN
+            fMoldTemp := fMoldTemp - 0.01;
+        END_IF;
+
+    END_IF;
+
+
+    fMoldTemp :=
+        LIMIT(-100.0, fMoldTemp, 600.0);
+
+
+										    // Pressure Simulation
+ 
+
+// During startup, screw rotation fills the nozzle
+// and pressure gradually rises.
+IF eMode = E_MachineMode.MODE_STARTUP THEN
+
+    IF bM101 THEN
+        fPressure := fPressure + 0.01;
+    END_IF;
+
+
+// During normal production
+ELSIF eMode = E_MachineMode.MODE_RUN THEN
+
+    // Injection temporarily raises pressure
+    IF bM102 THEN
+
+        fPressure := fPressure + 0.10;
+
+    ELSE
+
+        // Pressure relaxes after injection
+        IF fPressure > 5.0 THEN
+            fPressure := fPressure - 0.10;
+
+        ELSIF fPressure < 5.0 THEN
+            fPressure := fPressure + 0.01;
+        END_IF;
+
+    END_IF;
+
+
+// Machine not producing
+ELSE
+
+    IF fPressure > 0.0 THEN
+        fPressure := fPressure - 0.05;
+    END_IF;
+
+END_IF;
+
+
+// Physical limits
+fPressure :=
+    LIMIT(0.0, fPressure, 200.0);
+
+						    // Convert physical values back to raw PLC signals
+ 
+    nPI101Raw :=
+        REAL_TO_INT(
+            (fPressure / 200.0) * 32767.0
+        );
+
+
+    nTI101Raw :=
+        REAL_TO_INT(
+            ((fBarrelTemp + 100.0) / 700.0)
+            * 32767.0
+        );
+
+
+    nTI201Raw :=
+        REAL_TO_INT(
+            ((fMoldTemp + 100.0) / 700.0)
+            * 32767.0
+        );
+
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_PlantSimulation">
+      <LineId Id="64" Count="0" />
+      <LineId Id="66" Count="1" />
+      <LineId Id="69" Count="46" />
+      <LineId Id="247" Count="0" />
+      <LineId Id="119" Count="1" />
+      <LineId Id="248" Count="0" />
+      <LineId Id="122" Count="21" />
+      <LineId Id="451" Count="0" />
+      <LineId Id="453" Count="10" />
+      <LineId Id="452" Count="0" />
+      <LineId Id="144" Count="1" />
+      <LineId Id="147" Count="1" />
+      <LineId Id="150" Count="28" />
+      <LineId Id="181" Count="1" />
+      <LineId Id="184" Count="12" />
+      <LineId Id="199" Count="2" />
+      <LineId Id="356" Count="42" />
+      <LineId Id="219" Count="0" />
+      <LineId Id="223" Count="1" />
+      <LineId Id="226" Count="0" />
+      <LineId Id="228" Count="18" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,208 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Machine" Id="{300fe369-8833-4d12-89a4-4ab6fd72a158}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Machine
+VAR_INPUT
+    // Operator controls
+    bStartup        : BOOL;
+    bStart          : BOOL;
+    bStop           : BOOL;
+    bShutdown       : BOOL;
+    bEStop          : BOOL;
+    bAck            : BOOL;
+
+    // Process feedback
+    fBarrelTemp     : REAL;
+    fPressureBar    : REAL;
+    bMoldClosed     : BOOL;
+
+    // Sequence feedback
+    bSequenceStopComplete : BOOL;
+END_VAR
+
+VAR_OUTPUT
+    eMode               : E_MachineMode := E_MachineMode.MODE_INITIAL;
+
+    // Temperature system
+    bTempControlEnable  : BOOL;
+    fTempSetpoint       : REAL;
+
+    // Mold cooling
+    bV2                 : BOOL;
+    bV3                 : BOOL;
+
+    // Startup commands
+    bStartupRotateCmd   : BOOL;
+    bStartupCloseCmd    : BOOL;
+
+    // Status
+    bMachineReady       : BOOL;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Default commands every scan
+bStartupRotateCmd := FALSE;
+bStartupCloseCmd := FALSE;
+bMachineReady := FALSE;
+
+
+// Emergency stop has highest priority
+
+IF bEStop THEN
+    eMode := E_MachineMode.MODE_ESTOP;
+END_IF;
+
+
+CASE eMode OF
+
+    // INITIAL
+
+    E_MachineMode.MODE_INITIAL:
+
+        bTempControlEnable := FALSE;
+        fTempSetpoint := GVL_Config.c_fShutdownTempSP;
+
+        bV2 := FALSE;
+        bV3 := FALSE;
+
+        IF bStartup AND NOT bEStop THEN
+            eMode := E_MachineMode.MODE_STARTUP;
+        END_IF;
+
+    // STARTUP
+
+    E_MachineMode.MODE_STARTUP:
+
+        bTempControlEnable := TRUE;
+        fTempSetpoint := GVL_Config.c_fStartupTempSP;
+
+        bV2 := TRUE;
+        bV3 := TRUE;
+
+
+        // Wait until barrel reaches required temperature
+        IF fBarrelTemp >= GVL_Config.c_fStartupTempSP THEN
+
+            // M101 runs until nozzle pressure reaches 4 bar
+            IF fPressureBar < GVL_Config.c_fStartupPressure THEN
+                bStartupRotateCmd := TRUE;
+            END_IF;
+
+            // Mold closes independently
+            IF NOT bMoldClosed THEN
+                bStartupCloseCmd := TRUE;
+            END_IF;
+
+
+            // Both startup conditions complete
+            IF (fPressureBar >= GVL_Config.c_fStartupPressure)
+               AND bMoldClosed THEN
+
+                eMode := E_MachineMode.MODE_STOPPED;
+
+            END_IF;
+
+        END_IF;
+
+    // STOPPED / READY
+
+    E_MachineMode.MODE_STOPPED:
+
+        bTempControlEnable := TRUE;
+        fTempSetpoint := GVL_Config.c_fStartupTempSP;
+
+        bV2 := TRUE;
+        bV3 := TRUE;
+
+        bMachineReady := TRUE;
+
+
+        IF bStart THEN
+
+            eMode := E_MachineMode.MODE_RUN;
+
+        ELSIF bShutdown THEN
+
+            eMode := E_MachineMode.MODE_SHUTDOWN;
+
+        END_IF;
+
+    // NORMAL PRODUCTION
+
+    E_MachineMode.MODE_RUN:
+
+        bTempControlEnable := TRUE;
+        fTempSetpoint := GVL_Config.c_fStartupTempSP;
+
+        bV2 := TRUE;
+        bV3 := TRUE;
+
+
+        // Sequence itself finishes the current part
+        // before declaring stop complete.
+        IF bSequenceStopComplete THEN
+            eMode := E_MachineMode.MODE_STOPPED;
+        END_IF;
+
+    // SHUTDOWN
+
+    E_MachineMode.MODE_SHUTDOWN:
+
+        bTempControlEnable := TRUE;
+        fTempSetpoint := GVL_Config.c_fShutdownTempSP;
+
+        bV2 := FALSE;
+        bV3 := FALSE;
+
+
+        IF fBarrelTemp <= GVL_Config.c_fShutdownComplete THEN
+
+            bTempControlEnable := FALSE;
+
+            eMode := E_MachineMode.MODE_INITIAL;
+
+        END_IF;
+
+    // EMERGENCY STOP
+
+    E_MachineMode.MODE_ESTOP:
+
+        bTempControlEnable := FALSE;
+
+        bV2 := FALSE;
+        bV3 := FALSE;
+
+        bStartupRotateCmd := FALSE;
+        bStartupCloseCmd := FALSE;
+
+
+        IF bAck AND NOT bEStop THEN
+            eMode := E_MachineMode.MODE_INITIAL;
+        END_IF;
+
+
+    ELSE
+
+        eMode := E_MachineMode.MODE_INITIAL;
+
+END_CASE;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Machine">
+      <LineId Id="53" Count="4" />
+      <LineId Id="59" Count="1" />
+      <LineId Id="62" Count="6" />
+      <LineId Id="71" Count="1" />
+      <LineId Id="74" Count="11" />
+      <LineId Id="89" Count="1" />
+      <LineId Id="92" Count="32" />
+      <LineId Id="128" Count="1" />
+      <LineId Id="131" Count="20" />
+      <LineId Id="155" Count="1" />
+      <LineId Id="158" Count="14" />
+      <LineId Id="176" Count="1" />
+      <LineId Id="179" Count="16" />
+      <LineId Id="199" Count="1" />
+      <LineId Id="202" Count="20" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

@@ -1,0 +1,181 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Vision" Id="{e4784a81-76f0-4833-826c-513aa733616e}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Vision
+VAR_INPUT
+    bEnable         : BOOL;
+    bTrigger        : BOOL;
+    bAck            : BOOL;
+
+	bFaultAck     : BOOL;
+
+    bForceOffline   : BOOL;
+    bForceReject    : BOOL;
+	bForceTimeout : BOOL;
+
+    nProductID      : DINT;
+END_VAR
+
+VAR_OUTPUT
+    stResult        : ST_VisionResult;
+    bOffline        : BOOL;
+	bTimeout : BOOL;
+END_VAR
+
+VAR
+    fbTrigger           : R_TRIG;
+    fbInspectionTimer   : TON;
+	fbTimeoutTimer    : TON;
+	
+    bInspectionActive   : BOOL := FALSE;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+// VISION SIMULATION
+
+
+// Communication state
+
+bOffline := bForceOffline;
+
+fbTrigger(CLK := bTrigger);
+
+
+// Operator acknowledges technical vision fault
+
+IF bFaultAck THEN
+    bTimeout := FALSE;
+END_IF;
+
+// Offline camera aborts active inspection
+
+IF bOffline THEN
+
+    bInspectionActive := FALSE;
+    stResult.bResultValid := FALSE;
+
+END_IF;
+
+// Camera ready
+
+stResult.bReady :=
+    bEnable
+    AND NOT bOffline
+    AND NOT bTimeout
+    AND NOT bInspectionActive
+    AND NOT stResult.bResultValid;
+
+// Start inspection
+
+IF fbTrigger.Q AND stResult.bReady THEN
+
+    bInspectionActive := TRUE;
+
+    stResult.bResultValid := FALSE;
+    stResult.bPartPresent := FALSE;
+
+END_IF;
+
+// Simulated processing timer
+//
+// ForceTimeout prevents the normal result from arriving.
+
+fbInspectionTimer(
+    IN := bInspectionActive AND NOT bForceTimeout,
+    PT := T#1S
+);
+
+// Maximum time allowed for inspection
+
+fbTimeoutTimer(
+    IN := bInspectionActive,
+    PT := T#3S
+);
+
+
+stResult.bBusy := bInspectionActive;
+
+// Successful inspection completed
+
+IF bInspectionActive
+   AND fbInspectionTimer.Q
+   AND NOT bOffline THEN
+
+    bInspectionActive := FALSE;
+
+    stResult.bResultValid := TRUE;
+    stResult.bPartPresent := TRUE;
+
+    stResult.nProductID := nProductID;
+
+    IF bForceReject THEN
+
+        stResult.bPartOK := FALSE;
+        stResult.nDefectCode := UINT#101;
+
+        stResult.fWidth := 47.2;
+        stResult.fHeight := 29.4;
+        stResult.fAngle := 2.5;
+
+    ELSE
+
+        stResult.bPartOK := TRUE;
+        stResult.nDefectCode := UINT#0;
+
+        stResult.fWidth := 50.1;
+        stResult.fHeight := 30.0;
+        stResult.fAngle := 0.2;
+
+    END_IF;
+
+END_IF;
+
+// Inspection timeout
+
+IF bInspectionActive
+   AND fbTimeoutTimer.Q THEN
+
+    bInspectionActive := FALSE;
+
+    bTimeout := TRUE;
+
+    stResult.bResultValid := FALSE;
+    stResult.bPartPresent := FALSE;
+
+END_IF;
+
+// PLC consumed valid inspection result
+
+IF bAck AND stResult.bResultValid THEN
+
+    stResult.bResultValid := FALSE;
+
+END_IF;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Vision">
+      <LineId Id="154" Count="1" />
+      <LineId Id="157" Count="0" />
+      <LineId Id="159" Count="1" />
+      <LineId Id="162" Count="4" />
+      <LineId Id="168" Count="1" />
+      <LineId Id="171" Count="3" />
+      <LineId Id="177" Count="1" />
+      <LineId Id="180" Count="6" />
+      <LineId Id="189" Count="1" />
+      <LineId Id="192" Count="6" />
+      <LineId Id="201" Count="1" />
+      <LineId Id="204" Count="8" />
+      <LineId Id="215" Count="3" />
+      <LineId Id="220" Count="4" />
+      <LineId Id="227" Count="1" />
+      <LineId Id="230" Count="7" />
+      <LineId Id="240" Count="1" />
+      <LineId Id="243" Count="32" />
+      <LineId Id="278" Count="1" />
+      <LineId Id="281" Count="11" />
+      <LineId Id="295" Count="1" />
+      <LineId Id="298" Count="4" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

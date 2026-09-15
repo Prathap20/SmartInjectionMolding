@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="ST_Recipe" Id="{db374a58-ade0-4aa0-adcc-ce6e0d9673d9}">
+    <Declaration><![CDATA[TYPE ST_Recipe :
+STRUCT
+	sProductName		: STRING(40);
+	
+	fBarrelTempSP       : REAL;
+    fPressureLimit      : REAL;
+
+    tCoolingTime        : TIME;
+    tInjectionTimeout   : TIME;
+
+    nVisionJob          : UINT;
+
+    fWidthMin           : REAL;
+    fWidthMax           : REAL;
+    fHeightMin          : REAL;
+    fHeightMax          : REAL;
+	
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <GVL Name="GVL_Status" Id="{c4122583-73a5-410a-90ef-90d05b64e99f}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	
+
+	eMachineMode:
+		E_MachineMode:= E_MachineMode.MODE_INITIAL;
+		
+	eSequenceState:
+		E_SequenceState:= E_SequenceState.SEQ_IDLE;
+		
+	stProduction:
+		ST_ProductionData;
+		
+	stVision:
+		ST_VisionResult;
+		
+	//Process Values
+	
+	fPressureBar      : REAL := 0.0;
+    fBarrelTemp       : REAL := 20.0;
+    fMoldTemp         : REAL := 20.0;
+
+	//Machine Status
+
+	bMachineReady     : BOOL := FALSE;
+    bCycleActive      : BOOL := FALSE;
+    bFaultActive      : BOOL := FALSE;	
+	
+	eActiveAlarm : E_AlarmID := E_AlarmID.ALARM_NONE;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

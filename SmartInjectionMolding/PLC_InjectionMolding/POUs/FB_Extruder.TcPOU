@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Extruder" Id="{cd172b27-b78e-4621-81a7-60e88fc5c915}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Extruder
+VAR_INPUT
+	bRotateCmd		:  BOOL;
+	bInjectCmd		:  BOOL;
+	
+	bES101			:  BOOL;
+	bES102			:  BOOL;
+END_VAR
+VAR_OUTPUT
+	bRotateRequest	:  BOOL;
+	bInjectRequest  :  BOOL;
+	
+	bAtFront		:  BOOL;
+	bAtRear			:  BOOL;
+	bBusy			:  BOOL;
+	
+	bCommandConflict:  BOOL;
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Screw position
+bAtFront := bES101;
+bAtRear  := bES102;
+
+// M101 and M102 must never be requested together
+bCommandConflict :=
+    bRotateCmd AND bInjectCmd;
+
+// Rotation / dosing request
+bRotateRequest :=
+    bRotateCmd
+    AND NOT bInjectCmd;
+
+// Injection request
+bInjectRequest :=
+    bInjectCmd
+    AND NOT bRotateCmd
+    AND NOT bAtFront;
+
+// Equipment busy
+bBusy :=
+    bRotateRequest OR bInjectRequest;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Extruder">
+      <LineId Id="30" Count="20" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

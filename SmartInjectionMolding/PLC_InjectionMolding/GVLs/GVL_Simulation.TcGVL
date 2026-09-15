@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <GVL Name="GVL_Simulation" Id="{e2815c3e-e00e-46c5-b2f2-33c0fa9ad025}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	
+	//Master Switch
+	
+	bSimulationEnabled : BOOL := TRUE;
+	
+	//Fault Injection
+	
+	bForcePressureHigh      : BOOL := FALSE;
+    bForceTempLow           : BOOL := FALSE;
+
+    bForceES101Fault        : BOOL := FALSE;
+    bForceES102Fault        : BOOL := FALSE;
+    bForceES201Fault        : BOOL := FALSE;
+    bForceES202Fault        : BOOL := FALSE;
+
+    bForceLIS101Fault       : BOOL := FALSE;
+    bForceLIS102Fault       : BOOL := FALSE;
+
+    bForceVisionOffline     : BOOL := FALSE;
+    bForceVisionReject      : BOOL := FALSE;	
+	bForceVisionTimeout : BOOL := FALSE;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <DUT Name="E_AlarmID" Id="{6057f51d-4f0e-43e7-a9b3-d159d405f120}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_AlarmID :
+(
+	ALARM_NONE:=0,
+	
+	//HOPPER
+	ALARM_HOPPER_LOW_TIMEOUT:=1001,
+	ALARM_HOPPER_FILL_TIMEOUT:=1002,
+	
+	//TEMPERATURE/PRESSURE
+	ALARM_TEMP_LOW:=2001,
+	ALARM_TEMP_HIGH:=2002,
+	ALARM_PRESSURE_HIGH:=2003,
+	
+	//MOLD/MOTION
+	ALARM_MOLD_OPEN_TIMEOUT:=3001,
+	ALARM_MOLD_CLOSE_TIMEOUT:=3002,
+	
+	//VISION
+	ALARM_VISION_OFFLINE:=4001,
+	ALARM_VISION_TIMEOUT:=4002,
+	
+	//SAFETY
+	ALARM_GUARD_OPEN:=9001,
+	ALARM_ESTOP:=9002
+);
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

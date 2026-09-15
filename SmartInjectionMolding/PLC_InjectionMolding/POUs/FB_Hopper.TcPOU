@@ -1,0 +1,149 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Hopper" Id="{55f7627a-b831-41d8-b2dc-081dda8da044}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Hopper
+VAR_INPUT
+	eMode			: E_MachineMode;
+	
+	bLIS101			: BOOL;
+	bLIS102			: BOOL;
+	
+	bAck			: BOOL;
+END_VAR
+VAR_OUTPUT
+	bFeederRequest	: BOOL;
+	bWarning		: BOOL;
+	bRefilling		: BOOL;
+	
+	bLowLevelTimeout	: BOOL;
+	bFillTimeout	: BOOL;
+END_VAR
+VAR
+	fbLowLevelTimer	: TON;
+	fbFIllTimer		: TON;
+	
+	bAutoEnabled	: BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[								// Automatic refill is allowed only during
+									// STARTUP or normal RUN operati
+								
+bAutoEnabled := (eMode = E_MachineMode.MODE_STARTUP) OR (eMode = E_MachineMode.MODE_RUN);
+
+//Warning Acknowledgement
+
+IF bAck THEN
+	bWarning := FALSE;
+	bLowLevelTimeout := FALSE;
+    bFillTimeout := FALSE;
+END_IF
+
+//Start Auto Refill
+
+IF bAutoEnabled
+	AND NOT bWarning
+	AND NOT bLIS101
+	AND NOT bRefilling THEN
+		bRefilling := TRUE;
+END_IF;
+
+//Stop when high level is reached
+
+IF bLIS102 THEN
+    bRefilling := FALSE;
+END_IF;
+
+// Stop refilling outside permitted machine modes
+IF NOT bAutoEnabled THEN
+    bRefilling := FALSE;
+END_IF;
+
+// Timer 1:
+// Low-level switch must recover within 30 seconds
+
+fbLowLevelTimer(
+	IN := bRefilling AND NOT bLIS101,
+	PT := GVL_Config.c_tHopperLowTimeout
+);
+
+IF fbLowLevelTimer.Q THEN
+    bLowLevelTimeout := TRUE;
+END_IF;
+
+// Timer 2:
+// Complete filling must finish within 180 seconds
+
+fbFillTimer(
+    IN := bRefilling,
+    PT := GVL_Config.c_tHopperFillTimeout
+);
+
+IF fbFillTimer.Q THEN
+    bFillTimeout := TRUE;
+END_IF;
+
+// Fault handling
+
+IF bLowLevelTimeout OR bFillTimeout THEN
+
+    bWarning := TRUE;
+    bRefilling := FALSE;
+
+END_IF;
+
+// Feeder motor request
+
+bFeederRequest :=
+    bRefilling
+    AND bAutoEnabled
+    AND NOT bWarning;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Hopper">
+      <LineId Id="33" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="36" Count="1" />
+      <LineId Id="44" Count="0" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="47" Count="0" />
+      <LineId Id="134" Count="1" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="51" Count="0" />
+      <LineId Id="53" Count="0" />
+      <LineId Id="55" Count="1" />
+      <LineId Id="58" Count="0" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="62" Count="2" />
+      <LineId Id="61" Count="0" />
+      <LineId Id="66" Count="3" />
+      <LineId Id="65" Count="0" />
+      <LineId Id="71" Count="1" />
+      <LineId Id="70" Count="0" />
+      <LineId Id="75" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="76" Count="3" />
+      <LineId Id="130" Count="1" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="81" Count="1" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="84" Count="5" />
+      <LineId Id="132" Count="1" />
+      <LineId Id="90" Count="1" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="93" Count="5" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="99" Count="0" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="104" Count="2" />
+      <LineId Id="101" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

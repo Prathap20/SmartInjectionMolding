@@ -1,0 +1,54 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
+  <POU Name="FB_Mold" Id="{f96a2fb0-fce4-449a-bd8e-3d62332791e1}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Mold
+VAR_INPUT
+	bOpenCmd		:  BOOL;
+	bCloseCmd		:  BOOL;
+	
+	bES201			:  BOOL;
+	bES202			:  BOOL;
+END_VAR
+VAR_OUTPUT
+	bOpenRequest	:  BOOL;
+	bCloseRequest	:  BOOL;
+	
+	bIsOpen			:  BOOL;
+	bIsClosed		:  BOOL;
+	bMoving			:  BOOL;
+	
+	bCommandConflict:  BOOL;
+END_VAR
+VAR
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Position status
+bIsOpen   := bES201;
+bIsClosed := bES202;
+
+// Detect contradictory commands
+bCommandConflict :=
+    bOpenCmd AND bCloseCmd;
+
+// Generate requests
+bOpenRequest :=
+    bOpenCmd
+    AND NOT bCloseCmd
+    AND NOT bIsOpen;
+
+bCloseRequest :=
+    bCloseCmd
+    AND NOT bOpenCmd
+    AND NOT bIsClosed;
+
+// Motion status
+bMoving :=
+    bOpenRequest OR bCloseRequest;]]></ST>
+    </Implementation>
+    <LineIds Name="FB_Mold">
+      <LineId Id="30" Count="20" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
