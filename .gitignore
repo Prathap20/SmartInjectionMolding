@@ -399,3 +399,21 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# TwinCAT temporary / generated files
+*.project~u
+*.tsproj.bak
+*.plcproj.bak
+*.bak
+*.tmp
+
+_Boot/
+_CompileInfo/
+
+*.tpy
+*.tmc
+*.bootdata
+*.compiled-library
+
+# TwinCAT user-specific project files
+*.project.~u
