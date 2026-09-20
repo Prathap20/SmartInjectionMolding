@@ -30,6 +30,8 @@ VAR_GLOBAL
     bFaultActive      : BOOL := FALSE;	
 	
 	eActiveAlarm : E_AlarmID := E_AlarmID.ALARM_NONE;
+	sSequenceText : STRING(32) := 'IDLE';
+	sMachineModeText : STRING(20) := 'INITIAL';
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>

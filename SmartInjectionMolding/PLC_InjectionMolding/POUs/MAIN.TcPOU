@@ -29,6 +29,12 @@ VAR
     bVisionTestAck        : BOOL := FALSE;
     nVisionTestProductID  : DINT := 1;
     bVisionOffline        : BOOL := FALSE;
+	bVisionTimeout : BOOL;
+	
+	
+	nRandomValue : UDINT;
+	
+	ePreviousSequenceState : E_SequenceState := E_SequenceState.SEQ_IDLE;
 	
 END_VAR
 ]]></Declaration>
@@ -141,6 +147,136 @@ fbInjectionSequence(
 );
 
 	GVL_Status.bCycleActive := fbInjectionSequence.bCycleActive;
+	
+	GVL_Status.stProduction.fLastCycleTimeSec :=
+    	TIME_TO_REAL(GVL_Status.stProduction.tLastCycleTime) / 1000.0;
+	
+
+CASE GVL_Status.eMachineMode OF
+
+    E_MachineMode.MODE_INITIAL:
+        GVL_Status.sMachineModeText := 'INITIAL';
+
+    E_MachineMode.MODE_STARTUP:
+        GVL_Status.sMachineModeText := 'STARTUP';
+
+    E_MachineMode.MODE_STOPPED:
+        GVL_Status.sMachineModeText := 'STOPPED';
+
+    E_MachineMode.MODE_RUN:
+        GVL_Status.sMachineModeText := 'RUN';
+
+    E_MachineMode.MODE_SHUTDOWN:
+        GVL_Status.sMachineModeText := 'SHUTDOWN';
+
+    E_MachineMode.MODE_ESTOP:
+        GVL_Status.sMachineModeText := 'E-STOP';
+
+ELSE
+    GVL_Status.sMachineModeText := 'UNKNOWN';
+
+END_CASE;
+
+
+
+
+
+CASE fbInjectionSequence.eState OF
+
+    E_SequenceState.SEQ_IDLE:
+        GVL_Status.sSequenceText := 'IDLE';
+
+    E_SequenceState.SEQ_INJECT:
+        GVL_Status.sSequenceText := 'INJECT';
+
+    E_SequenceState.SEQ_COOLING:
+        GVL_Status.sSequenceText := 'COOLING';
+
+    E_SequenceState.SEQ_DOSING:
+        GVL_Status.sSequenceText := 'DOSING';
+
+    E_SequenceState.SEQ_OPEN_MOLD:
+        GVL_Status.sSequenceText := 'OPEN MOLD';
+
+    E_SequenceState.SEQ_EJECT:
+        GVL_Status.sSequenceText := 'EJECT';
+
+    E_SequenceState.SEQ_CLOSE_MOLD:
+        GVL_Status.sSequenceText := 'CLOSE MOLD';
+
+    E_SequenceState.SEQ_VISION_TRIGGER:
+        GVL_Status.sSequenceText := 'VISION TRIGGER';
+
+    E_SequenceState.SEQ_VISION_WAIT:
+        GVL_Status.sSequenceText := 'VISION WAIT';
+
+    E_SequenceState.SEQ_SORT_PART:
+        GVL_Status.sSequenceText := 'SORT PART';
+
+    E_SequenceState.SEQ_COMPLETE:
+        GVL_Status.sSequenceText := 'COMPLETE';
+
+ELSE
+    GVL_Status.sSequenceText := 'UNKNOWN';
+
+END_CASE;
+
+
+
+// =====================================================
+// RANDOM VIRTUAL PART GENERATOR
+// Select exactly one image when a new cycle enters
+// SEQ_INJECT.
+// =====================================================
+
+IF GVL_Simulation.bRandomPartMode
+   AND
+   (fbInjectionSequence.eState = E_SequenceState.SEQ_INJECT)
+   AND
+   (ePreviousSequenceState <> E_SequenceState.SEQ_INJECT) THEN
+
+    // -------------------------------------------------
+    // Generate next pseudo-random number
+    // -------------------------------------------------
+
+    GVL_Simulation.nRandomSeed :=
+        (GVL_Simulation.nRandomSeed * UDINT#1664525)
+        + UDINT#1013904223;
+
+    nRandomValue :=
+        GVL_Simulation.nRandomSeed;
+
+
+    // -------------------------------------------------
+    // Map pseudo-random value to dataset index 1..40
+    // -------------------------------------------------
+
+    GVL_Simulation.nVisionDatasetIndex :=
+        UDINT_TO_INT(
+            nRandomValue MOD UDINT#40
+        ) + 1;
+
+
+    // -------------------------------------------------
+    // Assign selected image to this molded part
+    // -------------------------------------------------
+
+    GVL_Simulation.sVisionImagePath :=
+        GVL_Simulation.aVisionDataset[
+            GVL_Simulation.nVisionDatasetIndex
+        ];
+
+END_IF;
+
+
+// =====================================================
+// STORE CURRENT STATE FOR NEXT PLC SCAN
+// This line MUST come after the random-selection logic.
+// =====================================================
+
+ePreviousSequenceState :=
+    fbInjectionSequence.eState;	
+	
 	
 	
 	
@@ -276,6 +412,50 @@ fbHopper(
     bWarning => GVL_IO.W_hopper
 );
 
+
+// =====================================================
+// RANDOM VIRTUAL PART GENERATOR
+// Select one image exactly once when entering SEQ_INJECT
+// =====================================================
+
+IF GVL_Simulation.bRandomPartMode
+   AND
+   (fbInjectionSequence.eState = E_SequenceState.SEQ_INJECT)
+   AND
+   (ePreviousSequenceState <> E_SequenceState.SEQ_INJECT) THEN
+
+    // Generate next pseudo-random number
+    GVL_Simulation.nRandomSeed :=
+        (GVL_Simulation.nRandomSeed * UDINT#1664525)
+        + UDINT#1013904223;
+
+    nRandomValue :=
+        GVL_Simulation.nRandomSeed;
+
+
+    // Convert random value to dataset index 1..40
+    GVL_Simulation.nVisionDatasetIndex :=
+        UDINT_TO_INT(
+            nRandomValue MOD UDINT#40
+        ) + 1;
+
+
+    // Assign selected image to current molded part
+    GVL_Simulation.sVisionImagePath :=
+        GVL_Simulation.aVisionDataset[
+            GVL_Simulation.nVisionDatasetIndex
+        ];
+
+END_IF;
+
+
+// IMPORTANT:
+// Store current state only AFTER the random selection check
+ePreviousSequenceState :=
+    fbInjectionSequence.eState;
+
+
+
 																	// VISION SYSTEM
 // Temporary simulation / commissioning interface
 
@@ -295,22 +475,25 @@ fbVision(
     bForceOffline :=
         GVL_Simulation.bForceVisionOffline,
 
-    bForceReject :=
-        GVL_Simulation.bForceVisionReject,
-
     bForceTimeout :=
         GVL_Simulation.bForceVisionTimeout,
 
     nProductID :=
         UDINT_TO_DINT(
-            GVL_Status.stProduction.nTotalParts
+            GVL_Status.stProduction.nTotalParts + 1
         ),
+		
+	sImagePath :=
+		GVL_Simulation.sVisionImagePath,
 
     stResult =>
         GVL_Status.stVision,
 
     bOffline =>
-        bVisionOffline
+        bVisionOffline,
+		
+	bTimeout =>
+        bVisionTimeout
 );
 
 																	// ALARM MANAGEMENT
@@ -386,7 +569,7 @@ fbPlantSim(
     nTI201Raw => GVL_IO.TI201_raw
 );
 
-
+//PRG_VisionTest();
 										]]></ST>
     </Implementation>
     <LineIds Name="MAIN">
@@ -411,7 +594,18 @@ fbPlantSim(
       <LineId Id="234" Count="1" />
       <LineId Id="606" Count="2" />
       <LineId Id="194" Count="0" />
-      <LineId Id="266" Count="2" />
+      <LineId Id="266" Count="1" />
+      <LineId Id="649" Count="2" />
+      <LineId Id="887" Count="0" />
+      <LineId Id="1028" Count="0" />
+      <LineId Id="1128" Count="22" />
+      <LineId Id="1122" Count="5" />
+      <LineId Id="1048" Count="37" />
+      <LineId Id="1029" Count="2" />
+      <LineId Id="1047" Count="0" />
+      <LineId Id="890" Count="51" />
+      <LineId Id="888" Count="1" />
+      <LineId Id="268" Count="0" />
       <LineId Id="300" Count="1" />
       <LineId Id="262" Count="0" />
       <LineId Id="256" Count="5" />
@@ -436,9 +630,20 @@ fbPlantSim(
       <LineId Id="177" Count="1" />
       <LineId Id="180" Count="9" />
       <LineId Id="175" Count="0" />
+      <LineId Id="691" Count="0" />
+      <LineId Id="704" Count="0" />
+      <LineId Id="953" Count="38" />
+      <LineId Id="834" Count="0" />
+      <LineId Id="693" Count="0" />
+      <LineId Id="688" Count="0" />
       <LineId Id="420" Count="2" />
       <LineId Id="424" Count="0" />
-      <LineId Id="520" Count="31" />
+      <LineId Id="520" Count="14" />
+      <LineId Id="538" Count="7" />
+      <LineId Id="639" Count="1" />
+      <LineId Id="642" Count="0" />
+      <LineId Id="546" Count="5" />
+      <LineId Id="643" Count="2" />
       <LineId Id="438" Count="0" />
       <LineId Id="372" Count="28" />
       <LineId Id="519" Count="0" />

@@ -3,179 +3,1082 @@
   <POU Name="FB_Vision" Id="{e4784a81-76f0-4833-826c-513aa733616e}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK FB_Vision
 VAR_INPUT
-    bEnable         : BOOL;
-    bTrigger        : BOOL;
-    bAck            : BOOL;
+    // Machine / handshake
+    bEnable       : BOOL;
+    bTrigger      : BOOL;
+    bAck          : BOOL;
+    bFaultAck     : BOOL;
 
-	bFaultAck     : BOOL;
+    // Simulation of technical faults
+    bForceOffline : BOOL;
+    bForceTimeout : BOOL;
 
-    bForceOffline   : BOOL;
-    bForceReject    : BOOL;
-	bForceTimeout : BOOL;
+    // Current product
+    nProductID    : DINT;
 
-    nProductID      : DINT;
+    // Software-in-the-loop image source
+    sImagePath    : STRING(255);
 END_VAR
+
 
 VAR_OUTPUT
-    stResult        : ST_VisionResult;
-    bOffline        : BOOL;
-	bTimeout : BOOL;
+    stResult : ST_VisionResult;
+
+    bOffline : BOOL;
+    bTimeout : BOOL;
+    bError   : BOOL;
 END_VAR
 
+
 VAR
-    fbTrigger           : R_TRIG;
-    fbInspectionTimer   : TON;
-	fbTimeoutTimer    : TON;
-	
-    bInspectionActive   : BOOL := FALSE;
+    // =================================================
+    // HANDSHAKE / STATE MACHINE
+    // =================================================
+
+    fbTrigger      : R_TRIG;
+    fbTimeoutTimer : TON;
+
+    nState : USINT := 0;
+
+    bReadCmd          : BOOL := FALSE;
+    bInspectionActive : BOOL := FALSE;
+
+    sActiveImagePath : STRING(255);
+    nActiveProductID : DINT := 0;
+
+
+    // =================================================
+    // IMAGE ACQUISITION
+    // =================================================
+
+    fbReadImage : FB_VN_ReadImage;
+
+    ipImageIn : ITcVnImage;
+
+    nReadErrorId : UDINT := 0;
+
+
+    // =================================================
+    // IMAGE PROCESSING
+    // =================================================
+
+    ipImageGray   : ITcVnImage;
+    ipImageBinary : ITcVnImage;
+    ipPartMask    : ITcVnImage;
+
+    hrVision : HRESULT := S_OK;
+
+    nImageWidth  : UDINT := 0;
+    nImageHeight : UDINT := 0;
+
+    fThreshold : LREAL := 128.0;
+
+
+    // =================================================
+    // HOLE ANALYSIS
+    // =================================================
+
+    ipLabelImage    : ITcVnImage;
+    ipBoundingBoxes : ITcVnContainer;
+    ipNumPixels     : ITcVnContainer;
+    ipCentroids     : ITcVnContainer;
+
+    nLabels : DINT := 0;
+
+    nPixels0 : DINT := 0;
+    nPixels1 : DINT := 0;
+    nPixels2 : DINT := 0;
+    nPixels3 : DINT := 0;
+
+    fHoleAreaDifferencePct : LREAL := 100.0;
+
+    bHoleCountOK : BOOL := FALSE;
+    bHoleSizeOK  : BOOL := FALSE;
+
+
+    // =================================================
+    // PART GEOMETRY
+    // =================================================
+
+    ipPartLabelImage    : ITcVnImage;
+    ipPartBoundingBoxes : ITcVnContainer;
+    ipPartNumPixels     : ITcVnContainer;
+    ipPartCentroids     : ITcVnContainer;
+
+    nPartLabels : DINT := 0;
+    nPartPixels : DINT := 0;
+
+    stPartBox : TcVnRectangle_DINT;
+
+    bWidthOK    : BOOL := FALSE;
+    bHeightOK   : BOOL := FALSE;
+    bPartAreaOK : BOOL := FALSE;
+    bShapeOK    : BOOL := FALSE;
+
+
+    // =================================================
+    // LOCAL ROI INSPECTION
+    // =================================================
+
+    ipCornerROI : ITcVnImage;
+    ipNotchROI  : ITcVnImage;
+
+    nCornerPixels : ULINT := 0;
+    nNotchPixels  : ULINT := 0;
+
+    nRefCornerPixels : ULINT := 4539;
+    nRefNotchPixels  : ULINT := 10400;
+
+    fCornerDifferencePct : LREAL := 100.0;
+    fNotchDifferencePct  : LREAL := 100.0;
+
+    bCornerOK : BOOL := FALSE;
+    bNotchOK  : BOOL := FALSE;
+
+
+    // =================================================
+    // FINAL INSPECTION
+    // =================================================
+
+    bInspectionOK : BOOL := FALSE;
+
+
+    // =================================================
+    // ADS IMAGE WATCH
+    // =================================================
+
+    ipImageDisplay    : ITcVnDisplayableImage;
+    ipGrayDisplay     : ITcVnDisplayableImage;
+    ipBinaryDisplay   : ITcVnDisplayableImage;
+    ipPartMaskDisplay : ITcVnDisplayableImage;
 END_VAR]]></Declaration>
     <Implementation>
-      <ST><![CDATA[
-// VISION SIMULATION
+      <ST><![CDATA[// =====================================================
+// VISION STATE MACHINE
+// =====================================================
 
 
-// Communication state
-
-bOffline := bForceOffline;
+// -----------------------------------------------------
+// Trigger edge
+// -----------------------------------------------------
 
 fbTrigger(CLK := bTrigger);
 
 
-// Operator acknowledges technical vision fault
+// -----------------------------------------------------
+// Communication state
+// -----------------------------------------------------
 
-IF bFaultAck THEN
+bOffline := bForceOffline;
+
+
+// Read command is a one-scan pulse
+bReadCmd := FALSE;
+
+
+// -----------------------------------------------------
+// Fault acknowledgement
+// -----------------------------------------------------
+
+IF bFaultAck AND NOT bOffline THEN
+
     bTimeout := FALSE;
-END_IF;
+    bError := FALSE;
 
-// Offline camera aborts active inspection
-
-IF bOffline THEN
-
-    bInspectionActive := FALSE;
-    stResult.bResultValid := FALSE;
-
-END_IF;
-
-// Camera ready
-
-stResult.bReady :=
-    bEnable
-    AND NOT bOffline
-    AND NOT bTimeout
-    AND NOT bInspectionActive
-    AND NOT stResult.bResultValid;
-
-// Start inspection
-
-IF fbTrigger.Q AND stResult.bReady THEN
-
-    bInspectionActive := TRUE;
-
-    stResult.bResultValid := FALSE;
-    stResult.bPartPresent := FALSE;
-
-END_IF;
-
-// Simulated processing timer
-//
-// ForceTimeout prevents the normal result from arriving.
-
-fbInspectionTimer(
-    IN := bInspectionActive AND NOT bForceTimeout,
-    PT := T#1S
-);
-
-// Maximum time allowed for inspection
-
-fbTimeoutTimer(
-    IN := bInspectionActive,
-    PT := T#3S
-);
-
-
-stResult.bBusy := bInspectionActive;
-
-// Successful inspection completed
-
-IF bInspectionActive
-   AND fbInspectionTimer.Q
-   AND NOT bOffline THEN
-
-    bInspectionActive := FALSE;
-
-    stResult.bResultValid := TRUE;
-    stResult.bPartPresent := TRUE;
-
-    stResult.nProductID := nProductID;
-
-    IF bForceReject THEN
-
-        stResult.bPartOK := FALSE;
-        stResult.nDefectCode := UINT#101;
-
-        stResult.fWidth := 47.2;
-        stResult.fHeight := 29.4;
-        stResult.fAngle := 2.5;
-
-    ELSE
-
-        stResult.bPartOK := TRUE;
-        stResult.nDefectCode := UINT#0;
-
-        stResult.fWidth := 50.1;
-        stResult.fHeight := 30.0;
-        stResult.fAngle := 0.2;
-
+    IF nState = 90 THEN
+        nState := 0;
     END_IF;
 
 END_IF;
 
-// Inspection timeout
 
-IF bInspectionActive
-   AND fbTimeoutTimer.Q THEN
+// -----------------------------------------------------
+// Camera / vision offline
+// -----------------------------------------------------
 
-    bInspectionActive := FALSE;
-
-    bTimeout := TRUE;
+IF bOffline THEN
 
     stResult.bResultValid := FALSE;
-    stResult.bPartPresent := FALSE;
+
+    nState := 90;
 
 END_IF;
 
-// PLC consumed valid inspection result
 
-IF bAck AND stResult.bResultValid THEN
+// =====================================================
+// MAIN VISION STATE MACHINE
+// =====================================================
 
+CASE nState OF
+
+
+    // =================================================
+    // 0 - IDLE / READY
+    // =================================================
+
+    0:
+
+        IF bEnable
+           AND NOT bOffline
+           AND NOT bTimeout
+           AND NOT bError
+           AND fbTrigger.Q THEN
+
+            // Capture the values associated with this part.
+
+            sActiveImagePath := sImagePath;
+            nActiveProductID := nProductID;
+
+			nReadErrorId := 0;
+			
+            // Clear previous result.
+
+            stResult.bResultValid := FALSE;
+            stResult.bPartPresent := FALSE;
+            stResult.bPartOK := FALSE;
+
+            stResult.nDefectCode := UINT#0;
+
+            stResult.fWidth := 0.0;
+            stResult.fHeight := 0.0;
+            stResult.fAngle := 0.0;
+
+            stResult.nProductID := nActiveProductID;
+
+
+            // Begin acquisition.
+
+            nState := 10;
+
+        END_IF;
+
+
+
+    // =================================================
+    // 10 - START IMAGE READ
+    // =================================================
+
+    10:
+
+        // Generate one-scan rising edge for FB_VN_ReadImage.
+
+        bReadCmd := TRUE;
+
+        nState := 20;
+
+
+
+    // =================================================
+    // 20 - WAIT FOR IMAGE
+    // =================================================
+
+    20:
+
+        // Image-reading error
+
+        IF fbReadImage.bError THEN
+
+            nReadErrorId := fbReadImage.nErrorId;
+
+            bError := TRUE;
+
+            // Image load / acquisition error
+            stResult.nDefectCode := UINT#401;
+
+            nState := 90;
+
+
+        // Force-timeout is deliberately used during
+        // commissioning to prevent progress.
+
+        ELSIF NOT bForceTimeout
+              AND NOT fbReadImage.bBusy
+              AND (ipImageIn <> 0) THEN
+
+            nState := 30;
+
+        END_IF;
+		
+	
+		// =================================================
+    	// 30 - PROCESS IMAGE
+    	// =================================================
+
+	30:
+
+        hrVision := S_OK;
+
+        bInspectionOK := FALSE;
+
+        bHoleCountOK := FALSE;
+        bHoleSizeOK := FALSE;
+
+        bWidthOK := FALSE;
+        bHeightOK := FALSE;
+        bPartAreaOK := FALSE;
+        bShapeOK := FALSE;
+
+        bCornerOK := FALSE;
+        bNotchOK := FALSE;
+
+        nPixels0 := 0;
+        nPixels1 := 0;
+        nPixels2 := 0;
+        nPixels3 := 0;
+
+        nPartPixels := 0;
+
+        fHoleAreaDifferencePct := 100.0;
+        fCornerDifferencePct := 100.0;
+        fNotchDifferencePct := 100.0;
+		
+		// =================================================
+    	// 1. IMAGE DIMENSIONS
+    	// =================================================
+
+    	hrVision := F_VN_GetImageWidth(
+        	ipImageIn,
+        	nImageWidth,
+        	hrVision
+    	);
+
+    	hrVision := F_VN_GetImageHeight(
+        	ipImageIn,
+        	nImageHeight,
+        	hrVision
+    	);
+
+
+    	// =================================================
+    	// 2. COLOR -> GRAYSCALE
+    	// =================================================
+
+   		hrVision := F_VN_ConvertColorSpace(
+        	ipSrcImage := ipImageIn,
+        	ipDestImage := ipImageGray,
+        	eTransform := TCVN_CST_BGR_TO_GRAY,
+        	hrPrev := hrVision
+    	);
+
+
+    	// =================================================
+    	// 3. NORMAL BINARY MASK
+    	//
+    	// Background = WHITE
+    	// Holes      = WHITE
+    	// Part       = BLACK
+    	// =================================================
+
+    	hrVision := F_VN_Threshold(
+        	ipSrcImage := ipImageGray,
+        	ipDestImage := ipImageBinary,
+        	fThreshold := fThreshold,
+        	fMaxValue := 255.0,
+        	eThresholdType := TCVN_TT_BINARY,
+        	hrPrev := hrVision
+    	);
+
+
+    	// =================================================
+    	// 4. INVERTED PART MASK
+    	//
+    	// Part       = WHITE
+    	// Background = BLACK
+    	// Holes      = BLACK
+    	// =================================================
+
+    	hrVision := F_VN_Threshold(
+        	ipSrcImage := ipImageGray,
+        	ipDestImage := ipPartMask,
+        	fThreshold := fThreshold,
+        	fMaxValue := 255.0,
+        	eThresholdType := TCVN_TT_BINARY_INV,
+        	hrPrev := hrVision
+    	);
+	
+
+    	// =================================================
+    	// 5. LOCAL ROI INSPECTION
+    	// =================================================
+
+
+    	// -------------------------------------------------
+    	// TOP-RIGHT CORNER ROI
+    	// Detect chipped corner
+    	// -------------------------------------------------
+
+    	hrVision := F_VN_CopyImageRegion(
+        	ipSrcImage := ipPartMask,
+        	nX := 970,
+        	nY := 245,
+        	nWidth := 100,
+        	nHeight := 60,
+        	ipDestImage := ipCornerROI,
+        	hrPrev := hrVision
+    	);
+
+    	hrVision := F_VN_CountNonZeroPixels(
+        	ipSrcImage := ipCornerROI,
+        	nNonZero := nCornerPixels,
+        	hrPrev := hrVision
+    	);
+
+
+    	// -------------------------------------------------
+    	// BOTTOM-CENTER NOTCH ROI
+    	// Detect malformed notch
+    	// -------------------------------------------------
+
+    	hrVision := F_VN_CopyImageRegion(
+        	ipSrcImage := ipPartMask,
+        	nX := 640,
+        	nY := 680,
+        	nWidth := 170,
+        	nHeight := 148,
+        	ipDestImage := ipNotchROI,
+        	hrPrev := hrVision
+    	);
+
+    	hrVision := F_VN_CountNonZeroPixels(
+        	ipSrcImage := ipNotchROI,
+        	nNonZero := nNotchPixels,
+        	hrPrev := hrVision
+    	);
+
+
+    	// =================================================
+    	// 6. OUTER PART GEOMETRY
+    	// =================================================
+
+    	hrVision := F_VN_ConnectedComponentsWithStats(
+        	ipSrcImage := ipPartMask,
+        	ipLabelImage := ipPartLabelImage,
+        	ipBoundingBoxes := ipPartBoundingBoxes,
+        	ipNumPixels := ipPartNumPixels,
+        	ipCentroids := ipPartCentroids,
+        	nLabels := nPartLabels,
+        	hrPrev := hrVision
+    	);
+
+
+    	// Expected:
+    	//
+    	// label 0 = black background
+    	// label 1 = white molded part
+
+    	IF nPartLabels >= 2 THEN
+
+        	hrVision := F_VN_GetAt_DINT(
+            	ipContainer := ipPartNumPixels,
+            	nElement := nPartPixels,
+            	nIndex := 1,
+            	hrPrev := hrVision
+        	);
+
+        	hrVision := F_VN_GetAt_TcVnRectangle_DINT(
+            	ipContainer := ipPartBoundingBoxes,
+            	stElement := stPartBox,
+            	nIndex := 1,
+            	hrPrev := hrVision
+        	);
+
+
+        	// ---------------------------------------------
+        	// Width check
+        	//
+        	// Reference = 672 px
+        	// Approximately +/- 3 %
+        	// ---------------------------------------------
+
+        	bWidthOK :=
+            	(stPartBox.nWidth >= 652)
+            	AND
+            	(stPartBox.nWidth <= 692);
+
+
+        	// ---------------------------------------------
+        	// Height check
+        	//
+        	// Reference = 577 px
+        	// Approximately +/- 3 %
+        	// ---------------------------------------------
+
+        	bHeightOK :=
+            	(stPartBox.nHeight >= 560)
+            	AND
+            	(stPartBox.nHeight <= 594);
+
+
+        	// ---------------------------------------------
+        	// Part-area check
+        	//
+        	// Reference = 350970 px
+        	// Approximately +/- 3 %
+        	// ---------------------------------------------
+
+        	bPartAreaOK :=
+            	(nPartPixels >= 340441)
+            	AND
+            	(nPartPixels <= 361499);
+
+    	ELSE
+
+        	// Part could not be identified
+
+        	bWidthOK := FALSE;
+        	bHeightOK := FALSE;
+        	bPartAreaOK := FALSE;
+
+    	END_IF;
+
+
+    	// Overall global shape check
+
+    	bShapeOK :=
+        	bWidthOK
+        	AND
+        	bHeightOK
+        	AND
+        	bPartAreaOK;
+
+
+    	// =================================================
+    	// 7. HOLE ANALYSIS
+    	// =================================================
+
+    	hrVision := F_VN_ConnectedComponentsWithStats(
+        	ipSrcImage := ipImageBinary,
+        	ipLabelImage := ipLabelImage,
+        	ipBoundingBoxes := ipBoundingBoxes,
+        	ipNumPixels := ipNumPixels,
+        	ipCentroids := ipCentroids,
+        	nLabels := nLabels,
+        	hrPrev := hrVision
+    	);
+
+
+    	// -------------------------------------------------
+    	// Safely extract components
+    	// -------------------------------------------------
+
+    	IF nLabels >= 1 THEN
+
+        	hrVision := F_VN_GetAt_DINT(
+            	ipContainer := ipNumPixels,
+            	nElement := nPixels0,
+            	nIndex := 0,
+            	hrPrev := hrVision
+        	);
+
+    	END_IF;
+
+
+    	IF nLabels >= 2 THEN
+
+        	hrVision := F_VN_GetAt_DINT(
+            	ipContainer := ipNumPixels,
+            	nElement := nPixels1,
+            	nIndex := 1,
+            	hrPrev := hrVision
+        	);
+
+    	END_IF;
+
+
+    	IF nLabels >= 3 THEN
+
+        	hrVision := F_VN_GetAt_DINT(
+            	ipContainer := ipNumPixels,
+            	nElement := nPixels2,
+            	nIndex := 2,
+            	hrPrev := hrVision
+        	);
+
+    	END_IF;
+
+
+    	IF nLabels >= 4 THEN
+
+        	hrVision := F_VN_GetAt_DINT(
+            	ipContainer := ipNumPixels,
+            	nElement := nPixels3,
+            	nIndex := 3,
+            	hrPrev := hrVision
+        	);
+
+    	END_IF;
+
+
+    	// -------------------------------------------------
+    	// Hole-count check
+    	//
+    	// Good image:
+    	//
+    	// label 0 = black part
+    	// label 1 = outside white background
+    	// label 2 = hole 1
+    	// label 3 = hole 2
+    	//
+    	// Therefore expected nLabels = 4
+    	// -------------------------------------------------
+
+    	bHoleCountOK := (nLabels = 4);
+
+
+    	// -------------------------------------------------
+    	// Hole-size comparison
+    	// -------------------------------------------------
+
+    	IF bHoleCountOK
+       	AND (nPixels2 > 0)
+       	AND (nPixels3 > 0) THEN
+
+        	fHoleAreaDifferencePct :=
+            	ABS(
+                	DINT_TO_LREAL(
+                    	nPixels2 - nPixels3
+                	)
+            	)
+            	/
+            	DINT_TO_LREAL(
+                	MAX(nPixels2, nPixels3)
+            	)
+            	* 100.0;
+
+
+        	// Maximum difference = 10 %
+
+        	bHoleSizeOK :=
+            	fHoleAreaDifferencePct <= 10.0;
+
+    	ELSE
+
+        	fHoleAreaDifferencePct := 100.0;
+        	bHoleSizeOK := FALSE;
+
+    	END_IF;
+
+
+    	// =================================================
+    	// 8. CORNER ROI CHECK
+    	// =================================================
+
+    	// Reference from deterministic good image:
+    	//
+    	// nRefCornerPixels = 4539
+
+    	IF nRefCornerPixels > 0 THEN
+
+        	IF nCornerPixels >= nRefCornerPixels THEN
+
+            	fCornerDifferencePct :=
+                	ULINT_TO_LREAL(
+                    	nCornerPixels - nRefCornerPixels
+                	)
+                	/
+                	ULINT_TO_LREAL(
+                    	nRefCornerPixels
+                	)
+                	* 100.0;
+
+        	ELSE
+
+            	fCornerDifferencePct :=
+                	ULINT_TO_LREAL(
+                    	nRefCornerPixels - nCornerPixels
+                	)
+                	/
+                	ULINT_TO_LREAL(
+                    	nRefCornerPixels
+                	)
+                	* 100.0;
+
+        	END_IF;
+
+
+        	// Maximum deviation = 10 %
+
+        	bCornerOK :=
+            	fCornerDifferencePct <= 10.0;
+
+    	ELSE
+
+        	bCornerOK := FALSE;
+
+    	END_IF;
+
+
+    	// =================================================
+    	// 9. NOTCH ROI CHECK
+    	// =================================================
+
+    	// Reference from deterministic good image:
+    	//
+    	// nRefNotchPixels = 10400
+
+    	IF nRefNotchPixels > 0 THEN
+
+        	IF nNotchPixels >= nRefNotchPixels THEN
+
+            	fNotchDifferencePct :=
+                	ULINT_TO_LREAL(
+                    	nNotchPixels - nRefNotchPixels
+                	)
+                	/
+                	ULINT_TO_LREAL(
+                    	nRefNotchPixels
+                	)
+                	* 100.0;
+
+        	ELSE
+
+            	fNotchDifferencePct :=
+                	ULINT_TO_LREAL(
+                    	nRefNotchPixels - nNotchPixels
+                	)
+                	/
+                	ULINT_TO_LREAL(
+                    	nRefNotchPixels
+                	)
+                	* 100.0;
+
+        	END_IF;
+
+
+        	// Maximum deviation = 10 %
+
+        	bNotchOK :=
+            	fNotchDifferencePct <= 10.0;
+
+    	ELSE
+
+        	bNotchOK := FALSE;
+
+    	END_IF;
+
+
+    	// =================================================
+    	// 10. FINAL INSPECTION RESULT
+    	//
+    	// IMPORTANT:
+    	// This MUST come after ALL individual checks.
+    	// =================================================
+
+    	bInspectionOK :=
+        	bShapeOK
+        	AND bHoleCountOK
+        	AND bHoleSizeOK
+        	AND bCornerOK
+        	AND bNotchOK;
+
+
+    	// =================================================
+    	// 11. DIAGNOSTIC DISPLAY IMAGES
+    	// =================================================
+
+
+    	// Original
+
+    	hrVision := F_VN_CopyIntoDisplayableImage(
+        	ipSrcImage := ipImageIn,
+        	ipDestImage := ipImageDisplay,
+        	hrPrev := hrVision
+    	);
+
+
+    	// Grayscale
+
+    	hrVision := F_VN_CopyIntoDisplayableImage(
+        	ipSrcImage := ipImageGray,
+        	ipDestImage := ipGrayDisplay,
+        	hrPrev := hrVision
+    	);
+
+
+    	// Normal binary
+
+    	hrVision := F_VN_CopyIntoDisplayableImage(
+        	ipSrcImage := ipImageBinary,
+        	ipDestImage := ipBinaryDisplay,
+        	hrPrev := hrVision
+    	);
+
+
+    	// Inverted part mask
+
+    	hrVision := F_VN_CopyIntoDisplayableImage(
+        	ipSrcImage := ipPartMask,
+        	ipDestImage := ipPartMaskDisplay,
+        	hrPrev := hrVision
+    	);
+
+
+
+		// =====================================================
+		// VISION PROCESSING SUCCESS / FAILURE
+		// =====================================================
+
+		IF hrVision = S_OK THEN
+
+    		// ---------------------------------------------
+    		// Part detected?
+    		// ---------------------------------------------
+
+    		stResult.bPartPresent :=
+        		(nPartLabels >= 2);
+
+
+    		// ---------------------------------------------
+    		// Store measurements
+    		// Currently these are pixels
+    		// ---------------------------------------------
+
+    		stResult.bPartPresent :=
+    			(nPartLabels >= 2);
+
+			IF stResult.bPartPresent THEN
+
+    			stResult.fWidth :=
+        			DINT_TO_REAL(stPartBox.nWidth);
+
+    			stResult.fHeight :=
+        			DINT_TO_REAL(stPartBox.nHeight);
+
+			ELSE
+
+    			stResult.fWidth := 0.0;
+    			stResult.fHeight := 0.0;
+
+			END_IF;
+
+			stResult.fAngle := 0.0;
+
+			stResult.nProductID :=
+    			nActiveProductID;
+
+
+    		// ---------------------------------------------
+    		// Defect classification
+    		// ---------------------------------------------
+
+    		IF NOT stResult.bPartPresent THEN
+
+        		stResult.nDefectCode := UINT#100;
+
+    		ELSIF NOT bWidthOK THEN
+
+        		stResult.nDefectCode := UINT#101;
+
+    		ELSIF NOT bHeightOK THEN
+
+        		stResult.nDefectCode := UINT#102;
+
+    		ELSIF NOT bPartAreaOK THEN
+
+        		stResult.nDefectCode := UINT#103;
+
+    		ELSIF NOT bHoleCountOK THEN
+
+        		stResult.nDefectCode := UINT#201;
+
+    		ELSIF NOT bHoleSizeOK THEN
+
+        		stResult.nDefectCode := UINT#202;
+
+    		ELSIF NOT bCornerOK THEN
+
+        		stResult.nDefectCode := UINT#301;
+
+    		ELSIF NOT bNotchOK THEN
+
+        		stResult.nDefectCode := UINT#302;
+
+    		ELSE
+
+        		stResult.nDefectCode := UINT#0;
+
+    		END_IF;
+
+
+    		// ---------------------------------------------
+    		// Final PASS / FAIL
+    		// ---------------------------------------------
+
+    		stResult.bPartOK :=
+        		bInspectionOK;
+
+
+    		// Result is now available to machine sequence
+
+    		stResult.bResultValid := TRUE;
+
+
+    		// Go to RESULT HOLD state
+
+    		nState := 40;
+
+
+		ELSE
+
+    		// ---------------------------------------------
+    		// TwinCAT Vision processing error
+    		// ---------------------------------------------
+
+    		bError := TRUE;
+
+    		stResult.bPartOK := FALSE;
+    		stResult.bResultValid := FALSE;
+
+    		stResult.nDefectCode := UINT#402;
+	
+    		nState := 90;
+
+		END_IF;
+
+
+	40:
+
+    	IF bAck THEN
+
+        	stResult.bResultValid := FALSE;
+
+        	nState := 0;
+
+    	END_IF;
+		
+	90:
+    
+		stResult.bResultValid := FALSE;
+
+    	IF bFaultAck
+       	AND NOT bOffline THEN
+
+        	bTimeout := FALSE;
+        	bError := FALSE;
+
+        	nState := 0;
+
+    	END_IF;
+	
+	
+END_CASE;	
+	
+
+// =====================================================
+// IMAGE ACQUISITION
+// Must execute cyclically
+// =====================================================
+
+fbReadImage(
+    sFilePath := sActiveImagePath,
+    ipDestImage := ipImageIn,
+    bRead := bReadCmd,
+    nTimeout := T#2S
+);
+
+
+// =====================================================
+// INSPECTION TIMEOUT
+// =====================================================
+
+bInspectionActive :=
+    (nState = 10)
+    OR
+    (nState = 20)
+    OR
+    (nState = 30);
+
+
+fbTimeoutTimer(
+    IN := bInspectionActive,
+    PT := T#5S
+);
+
+
+IF fbTimeoutTimer.Q THEN
+
+    bTimeout := TRUE;
+
+    stResult.bPartOK := FALSE;
     stResult.bResultValid := FALSE;
 
-END_IF;]]></ST>
+    // Vision inspection timeout
+    stResult.nDefectCode := UINT#403;
+
+    nState := 90;
+
+END_IF;
+
+
+// =====================================================
+// HANDSHAKE STATUS
+// =====================================================
+
+// Busy while acquiring or processing image
+
+stResult.bBusy :=
+    (nState = 10)
+    OR
+    (nState = 20)
+    OR
+    (nState = 30);
+
+
+// Ready only when completely idle and healthy
+
+stResult.bReady :=
+    bEnable
+    AND
+    (nState = 0)
+    AND
+    NOT bOffline
+    AND
+    NOT bTimeout
+    AND
+    NOT bError
+    AND
+    NOT stResult.bResultValid;	
+	
+	
+	
+	
+	
+	
+	
+	]]></ST>
     </Implementation>
     <LineIds Name="FB_Vision">
-      <LineId Id="154" Count="1" />
-      <LineId Id="157" Count="0" />
-      <LineId Id="159" Count="1" />
-      <LineId Id="162" Count="4" />
-      <LineId Id="168" Count="1" />
-      <LineId Id="171" Count="3" />
-      <LineId Id="177" Count="1" />
-      <LineId Id="180" Count="6" />
-      <LineId Id="189" Count="1" />
-      <LineId Id="192" Count="6" />
-      <LineId Id="201" Count="1" />
-      <LineId Id="204" Count="8" />
-      <LineId Id="215" Count="3" />
-      <LineId Id="220" Count="4" />
-      <LineId Id="227" Count="1" />
-      <LineId Id="230" Count="7" />
-      <LineId Id="240" Count="1" />
-      <LineId Id="243" Count="32" />
-      <LineId Id="278" Count="1" />
-      <LineId Id="281" Count="11" />
-      <LineId Id="295" Count="1" />
-      <LineId Id="298" Count="4" />
+      <LineId Id="480" Count="76" />
+      <LineId Id="1335" Count="0" />
+      <LineId Id="557" Count="65" />
       <LineId Id="9" Count="0" />
+      <LineId Id="623" Count="0" />
+      <LineId Id="637" Count="0" />
+      <LineId Id="639" Count="29" />
+      <LineId Id="638" Count="0" />
+      <LineId Id="669" Count="0" />
+      <LineId Id="671" Count="434" />
+      <LineId Id="1107" Count="0" />
+      <LineId Id="1109" Count="0" />
+      <LineId Id="1111" Count="0" />
+      <LineId Id="1113" Count="40" />
+      <LineId Id="1180" Count="21" />
+      <LineId Id="1314" Count="20" />
+      <LineId Id="1211" Count="78" />
+      <LineId Id="1169" Count="0" />
+      <LineId Id="1290" Count="9" />
+      <LineId Id="1170" Count="0" />
+      <LineId Id="1300" Count="0" />
+      <LineId Id="1302" Count="1" />
+      <LineId Id="1313" Count="0" />
+      <LineId Id="1304" Count="8" />
+      <LineId Id="1301" Count="0" />
+      <LineId Id="670" Count="0" />
+      <LineId Id="627" Count="2" />
+      <LineId Id="1336" Count="73" />
+      <LineId Id="630" Count="6" />
+      <LineId Id="626" Count="0" />
+      <LineId Id="625" Count="0" />
     </LineIds>
   </POU>
 </TcPlcObject>

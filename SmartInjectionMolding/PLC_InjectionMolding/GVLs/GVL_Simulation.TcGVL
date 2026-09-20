@@ -2,28 +2,127 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
   <GVL Name="GVL_Simulation" Id="{e2815c3e-e00e-46c5-b2f2-33c0fa9ad025}">
     <Declaration><![CDATA[{attribute 'qualified_only'}
+
 VAR_GLOBAL
-	
-	//Master Switch
-	
-	bSimulationEnabled : BOOL := TRUE;
-	
-	//Fault Injection
-	
-	bForcePressureHigh      : BOOL := FALSE;
-    bForceTempLow           : BOOL := FALSE;
 
-    bForceES101Fault        : BOOL := FALSE;
-    bForceES102Fault        : BOOL := FALSE;
-    bForceES201Fault        : BOOL := FALSE;
-    bForceES202Fault        : BOOL := FALSE;
+    // =====================================================
+    // MASTER SWITCH
+    // =====================================================
 
-    bForceLIS101Fault       : BOOL := FALSE;
-    bForceLIS102Fault       : BOOL := FALSE;
+    bSimulationEnabled : BOOL := TRUE;
 
-    bForceVisionOffline     : BOOL := FALSE;
-    bForceVisionReject      : BOOL := FALSE;	
-	bForceVisionTimeout : BOOL := FALSE;
+
+    // =====================================================
+    // FAULT INJECTION
+    // =====================================================
+
+    bForcePressureHigh : BOOL := FALSE;
+    bForceTempLow      : BOOL := FALSE;
+
+    bForceES101Fault   : BOOL := FALSE;
+    bForceES102Fault   : BOOL := FALSE;
+    bForceES201Fault   : BOOL := FALSE;
+    bForceES202Fault   : BOOL := FALSE;
+
+    bForceLIS101Fault  : BOOL := FALSE;
+    bForceLIS102Fault  : BOOL := FALSE;
+
+
+    // =====================================================
+    // VISION FAULT INJECTION
+    // =====================================================
+
+    bForceVisionOffline : BOOL := FALSE;
+
+    // Kept for compatibility / old commissioning logic.
+    // The new FB_Vision does not need this for real defect detection.
+    bForceVisionReject  : BOOL := FALSE;
+
+    bForceVisionTimeout : BOOL := FALSE;
+
+
+    // =====================================================
+    // VISION IMAGE SOURCE
+    // =====================================================
+
+    // Used by FB_Vision.
+    // In manual mode, set this directly.
+    // In random mode, MAIN updates it automatically.
+    sVisionImagePath : STRING(255) :=
+        'C:\TcVision\good_reference.png';
+
+
+    // =====================================================
+    // RANDOM VIRTUAL PART MODE
+    // =====================================================
+
+    // FALSE = manually choose sVisionImagePath
+    // TRUE  = randomly select one dataset image
+    //         whenever a new part enters SEQ_INJECT
+    bRandomPartMode : BOOL := TRUE;
+
+
+    // Current image selected for the molded part
+    nVisionDatasetIndex : INT := 1;
+
+
+    // Seed for pseudo-random number generator
+    // Fixed value makes the sequence reproducible
+    nRandomSeed : UDINT := 123456789;
+
+
+    // =====================================================
+    // RANDOM VISION DATASET
+    // =====================================================
+
+    aVisionDataset : ARRAY[1..40] OF STRING(255) := [
+
+        'C:\TcVision\RandomDataset\part_001.png',
+        'C:\TcVision\RandomDataset\part_002.png',
+        'C:\TcVision\RandomDataset\part_003.png',
+        'C:\TcVision\RandomDataset\part_004.png',
+        'C:\TcVision\RandomDataset\part_005.png',
+        'C:\TcVision\RandomDataset\part_006.png',
+        'C:\TcVision\RandomDataset\part_007.png',
+        'C:\TcVision\RandomDataset\part_008.png',
+        'C:\TcVision\RandomDataset\part_009.png',
+        'C:\TcVision\RandomDataset\part_010.png',
+
+        'C:\TcVision\RandomDataset\part_011.png',
+        'C:\TcVision\RandomDataset\part_012.png',
+        'C:\TcVision\RandomDataset\part_013.png',
+        'C:\TcVision\RandomDataset\part_014.png',
+        'C:\TcVision\RandomDataset\part_015.png',
+        'C:\TcVision\RandomDataset\part_016.png',
+        'C:\TcVision\RandomDataset\part_017.png',
+        'C:\TcVision\RandomDataset\part_018.png',
+        'C:\TcVision\RandomDataset\part_019.png',
+        'C:\TcVision\RandomDataset\part_020.png',
+
+        'C:\TcVision\RandomDataset\part_021.png',
+        'C:\TcVision\RandomDataset\part_022.png',
+        'C:\TcVision\RandomDataset\part_023.png',
+        'C:\TcVision\RandomDataset\part_024.png',
+        'C:\TcVision\RandomDataset\part_025.png',
+        'C:\TcVision\RandomDataset\part_026.png',
+        'C:\TcVision\RandomDataset\part_027.png',
+        'C:\TcVision\RandomDataset\part_028.png',
+        'C:\TcVision\RandomDataset\part_029.png',
+        'C:\TcVision\RandomDataset\part_030.png',
+
+        'C:\TcVision\RandomDataset\part_031.png',
+        'C:\TcVision\RandomDataset\part_032.png',
+        'C:\TcVision\RandomDataset\part_033.png',
+        'C:\TcVision\RandomDataset\part_034.png',
+        'C:\TcVision\RandomDataset\part_035.png',
+        'C:\TcVision\RandomDataset\part_036.png',
+        'C:\TcVision\RandomDataset\part_037.png',
+        'C:\TcVision\RandomDataset\part_038.png',
+        'C:\TcVision\RandomDataset\part_039.png',
+        'C:\TcVision\RandomDataset\part_040.png'
+
+    ];
+
 END_VAR]]></Declaration>
   </GVL>
 </TcPlcObject>
