@@ -417,3 +417,28 @@ _CompileInfo/
 
 # TwinCAT user-specific project files
 *.project.~u
+
+# Additional TwinCAT generated/runtime files
+_Libraries/
+*.library
+
+*.app
+*.cid
+*.crc
+*.occ
+*.compileinfo
+
+CurrentConfig.*
+*_boot.tzip
+*.tzip
+*.tszip
+
+LineIDs.dbg
+LineIDs.dbg.bak
+
+*.core
+
+*.tpzip
+*.tizip
+*.tclrs
+TrialLicense.tclrs

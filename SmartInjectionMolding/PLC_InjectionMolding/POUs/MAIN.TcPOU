@@ -536,6 +536,21 @@ fbAlarmManager(
         GVL_Status.eActiveAlarm
 );
 
+CASE GVL_Status.eActiveAlarm OF
+
+    E_AlarmID.ALARM_NONE:
+        GVL_Status.sActiveAlarmText := 'NONE';
+
+    E_AlarmID.ALARM_VISION_OFFLINE:
+        GVL_Status.sActiveAlarmText := 'VISION OFFLINE';
+
+    E_AlarmID.ALARM_VISION_TIMEOUT:
+        GVL_Status.sActiveAlarmText := 'VISION TIMEOUT';
+
+ELSE
+    GVL_Status.sActiveAlarmText := 'ALARM ACTIVE';
+
+END_CASE;
 
 											// PLANT SIMULATION
 
@@ -649,6 +664,7 @@ fbPlantSim(
       <LineId Id="519" Count="0" />
       <LineId Id="402" Count="8" />
       <LineId Id="176" Count="0" />
+      <LineId Id="1188" Count="14" />
       <LineId Id="173" Count="0" />
       <LineId Id="94" Count="0" />
       <LineId Id="12" Count="0" />

@@ -1305,7 +1305,7 @@
 			</Hides>
 		</DataType>
 	</DataTypes>
-	<Project ProjectGUID="{402500F9-BD3D-4052-87BC-3E2258A084D5}" Target64Bit="true" ShowHideConfigurations="#x347">
+	<Project ProjectGUID="{402500F9-BD3D-4052-87BC-3E2258A084D5}" Target64Bit="true" ShowHideConfigurations="#x3c7">
 		<System>
 			<Settings MaxCpus="4" NonWinCpus="1" RouterMemory="268435456">
 				<Cpu CpuId="3"/>
@@ -1323,7 +1323,7 @@
 		</System>
 		<Plc>
 			<Project GUID="{4D85E9BE-95BA-4AA0-A224-E1A6B41FFDF8}" Name="PLC_InjectionMolding" PrjFilePath="PLC_InjectionMolding\PLC_InjectionMolding.plcproj" TmcFilePath="PLC_InjectionMolding\PLC_InjectionMolding.tmc" ReloadTmc="true" AmsPort="851" FileArchiveSettings="#x000e" SymbolicMapping="true">
-				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="PLC_InjectionMolding\PLC_InjectionMolding.tmc" TmcHash="{820369F1-060D-3CB7-DC7E-1F0B5E912CD5}">
+				<Instance Id="#x08502000" TcSmClass="TComPlcObjDef" KeepUnrestoredLinks="2" TmcPath="PLC_InjectionMolding\PLC_InjectionMolding.tmc" TmcHash="{471C1410-3DDB-812C-4AFF-DD7F1F6965A7}">
 					<Name>PLC_InjectionMolding Instance</Name>
 					<CLSID ClassFactory="TcPlc30">{08500001-0000-0000-F000-000000000064}</CLSID>
 					<Contexts>
