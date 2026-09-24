@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<TcPlcObject Version="1.1.0.1">
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.16">
   <Task Name="PlcTask" Id="{02b06081-ee0a-4a79-85e8-738a9cfd84a8}">
     <!--CycleTime in micro seconds.-->
     <CycleTime>10000</CycleTime>
@@ -7,11 +7,13 @@
     <PouCall>
       <Name>MAIN</Name>
     </PouCall>
+    <PouCall>
+      <Name>PRG_VisionTest</Name>
+    </PouCall>
     <TaskFBGuid>{ca2b9701-fb93-407d-82b2-a4a4b58d337c}</TaskFBGuid>
     <Fb_init>{dd418ba8-1809-4a02-a00b-567c3c81d54d}</Fb_init>
     <Fb_exit>{abdc362f-b25f-413e-a1af-aadf987a0e37}</Fb_exit>
     <CycleUpdate>{ff5a58e5-773e-4c45-83b2-a879fc0a29bf}</CycleUpdate>
     <PostCycleUpdate>{caac2f21-9196-48c8-8037-e55a7dc53d7e}</PostCycleUpdate>
-    <ObjectProperties />
   </Task>
 </TcPlcObject>

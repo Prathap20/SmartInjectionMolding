@@ -3,22 +3,31 @@
   <DUT Name="ST_VisionResult" Id="{53ed8d9f-00fd-4541-b07c-c10f3587e1ae}">
     <Declaration><![CDATA[TYPE ST_VisionResult :
 STRUCT
-	bReady				: BOOL;
-	bBusy				: BOOL;
-	bResultValid		: BOOL;
-	
-	bPartPresent		: BOOL;
-	bPartOK				: BOOL;
-	
-	nDefectCode			: UINT;
-	
-	fWidth          	: REAL;
-    fHeight         	: REAL;
-    fAngle          	: REAL;
 
-    nProductID      	: DINT;	
+    // Vision system status
+    bReady       : BOOL;
+    bBusy        : BOOL;
+
+    // Result handshake
+    bResultValid : BOOL;
+
+    // Inspection result
+    bPartPresent : BOOL;
+    bPartOK      : BOOL;
+
+    // Classification
+    nDefectCode  : UINT;
+
+    // Measured geometry
+    // Currently stored in pixels
+    fWidth       : REAL;
+    fHeight      : REAL;
+    fAngle       : REAL;
+
+    // Identification of inspected part
+    nProductID   : DINT;
+
 END_STRUCT
-END_TYPE
-]]></Declaration>
+END_TYPE]]></Declaration>
   </DUT>
 </TcPlcObject>
